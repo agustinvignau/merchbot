@@ -318,6 +318,54 @@ class TestAskConFunctionCalling:
         assert client.models.generate_content.call_count == 2
 
 
+class TestAskRespuestaVaciaPostToolCall:
+    """v2 mejorada: si Gemini queda mudo tras una tool, le damos una chance más."""
+
+    def test_nudge_si_text_vacio_despues_de_tool(self, db_with_data):
+        """Caso real reportado: 'Hay stock de remeras negras m?' devolvió vacío.
+        Esperado: 1) tool call → 2) text vacío → 3) iter extra con nudge → 4) respuesta."""
+        bot, client = _bot_con_responses([
+            _mock_response_with_calls(_mock_fc("buscar_stock", {"talle": "m?"})),
+            _mock_response_with_text(""),  # Gemini se quedó mudo
+            _mock_response_with_text("No encontré productos con talle 'm?'. Probá con 'M'."),
+        ])
+        respuesta = bot.ask(user_id=1, query="Hay stock de remeras negras m?")
+        assert "No encontré" in respuesta or "Probá" in respuesta
+        # 3 llamadas: tool, mudo, post-nudge
+        assert client.models.generate_content.call_count == 3
+
+    def test_fallback_si_no_hubo_tool_calls_y_text_vacio(self, db_with_data):
+        """Caso edge: Gemini devuelve vacío sin haber pedido tools.
+        No tiene sentido nudgear → fallback directo."""
+        bot, client = _bot_con_responses([
+            _mock_response_with_text(""),  # vacío directamente
+        ])
+        respuesta = bot.ask(user_id=1, query="????")
+        assert "No pude armar una respuesta" in respuesta
+        assert client.models.generate_content.call_count == 1
+
+    def test_fallback_si_nudge_tampoco_responde(self, db_with_data):
+        """Después del nudge sigue mudo → fallback, sin más intentos."""
+        bot, client = _bot_con_responses([
+            _mock_response_with_calls(_mock_fc("buscar_stock", {})),
+            _mock_response_with_text(""),       # mudo
+            _mock_response_with_text(""),       # mudo otra vez post-nudge
+        ])
+        respuesta = bot.ask(user_id=1, query="algo")
+        assert "No pude armar" in respuesta
+        # 3 llamadas, ni una más
+        assert client.models.generate_content.call_count == 3
+
+    def test_fallback_no_se_guarda_en_memoria(self, db_with_data):
+        """Si tuvimos que devolver fallback, no contaminamos el historial."""
+        bot, client = _bot_con_responses([
+            _mock_response_with_text(""),  # vacío directo
+        ])
+        bot.ask(user_id=99, query="????")
+        # El historial debería estar vacío (no se guardó nada)
+        assert 99 not in bot._memoria or len(bot._memoria[99]) == 0
+
+
 class TestAskLimiteIteraciones:
     """Protección contra loops infinitos de function calls."""
 

@@ -357,13 +357,33 @@ class MerchBot:
         )
         return contenidos
 
+    @staticmethod
+    def _finish_reason_str(response) -> str:
+        """Extrae el finish_reason de un response de forma segura para logging."""
+        try:
+            return str(response.candidates[0].finish_reason)
+        except (AttributeError, IndexError):
+            return "?"
+
     def ask(self, user_id: int, query: str) -> str:
-        """Pregunta principal con loop de function calling."""
+        """Pregunta principal con loop de function calling.
+
+        Flujo:
+        - Iteramos mandando contents + tools a Gemini.
+        - Si Gemini pide function calls: las ejecutamos, agregamos resultados, loopeamos.
+        - Si Gemini devuelve texto: lo guardamos en memoria y lo retornamos.
+        - Si Gemini devuelve texto VACÍO post-tool-calls: le damos UNA iteración extra
+          con un nudge ("articulá la respuesta") antes de caer al fallback. Esto
+          atrapa casos donde el modelo se "queda mudo" tras una tool que no devolvió
+          resultados (típico con queries ambiguas, ej. "talle m?" en vez de "talle M").
+        """
         if not query or not query.strip():
             return ("Decime una consulta. Ej: '¿cuántas remeras negras M tengo?', "
                     "'qué pidió Coca-Cola', 'qué hay que comprar'.")
 
         contents = self._build_initial_contents(user_id, query)
+        had_tool_calls = False       # algún turno previo pidió tools
+        nudge_intentado = False      # ya le dimos el "articulá la respuesta"
 
         for iteration in range(self.MAX_FUNCTION_CALL_ITERATIONS):
             response = self.client.models.generate_content(
@@ -380,48 +400,79 @@ class MerchBot:
             function_calls = response.function_calls or []
 
             if function_calls:
-                # Gemini quiere llamar 1+ funciones. Las ejecutamos.
+                had_tool_calls = True
                 logger.info(
                     "Iter %d: Gemini pidió %d function call(s): %s",
                     iteration + 1, len(function_calls),
                     [fc.name for fc in function_calls],
                 )
 
-                # 1) Agregamos la respuesta del modelo (con las function calls)
-                #    al historial para esta llamada.
                 contents.append(response.candidates[0].content)
-
-                # 2) Ejecutamos cada función y agregamos el resultado.
                 tool_response_parts = []
                 for fc in function_calls:
                     args = dict(fc.args) if fc.args else {}
                     result = ejecutar_tool(fc.name, args)
+                    # Loguear args + resumen del resultado para diagnóstico
+                    resumen_result = (
+                        f"keys={list(result.keys())[:4]}"
+                        if isinstance(result, dict) else type(result).__name__
+                    )
+                    logger.info(
+                        "  -> %s(%r) → %s", fc.name, args, resumen_result,
+                    )
                     tool_response_parts.append(
                         genai_types.Part.from_function_response(
                             name=fc.name,
                             response=result,
                         )
                     )
-                # Tool responses se mandan en un único Content con role="user"
                 contents.append(genai_types.Content(
                     role="user",
                     parts=tool_response_parts,
                 ))
                 continue
 
-            # No hubo function calls -> Gemini terminó, devolvió texto final.
+            # Sin function calls: Gemini debería estar devolviendo texto final.
             respuesta = (response.text or "").strip()
-            if not respuesta:
-                respuesta = "No pude generar respuesta esta vez. Probá reformulando."
 
-            self._memoria[user_id].append(Turno(role="user", text=query))
-            self._memoria[user_id].append(Turno(role="model", text=respuesta))
-            return respuesta
+            if respuesta:
+                self._memoria[user_id].append(Turno(role="user", text=query))
+                self._memoria[user_id].append(Turno(role="model", text=respuesta))
+                return respuesta
 
-        # Si llegamos acá: excedimos el máximo de iteraciones.
+            # ★ Texto VACÍO sin function calls.
+            # Loguear con detalle para entender qué pasó (mejora B).
+            logger.warning(
+                "Iter %d: respuesta vacía. finish_reason=%s had_tool_calls=%s "
+                "nudge_intentado=%s query=%r",
+                iteration + 1, self._finish_reason_str(response),
+                had_tool_calls, nudge_intentado, query,
+            )
+
+            # Si hubo tool calls antes pero el modelo se "quedó mudo", darle
+            # UNA chance más con un nudge (mejora A). Si ya lo intentamos o
+            # nunca hubo tools, cortamos al fallback.
+            if had_tool_calls and not nudge_intentado:
+                nudge_intentado = True
+                contents.append(genai_types.Content(
+                    role="user",
+                    parts=[genai_types.Part(text=(
+                        "Por favor articulá la respuesta para el usuario usando los "
+                        "datos que ya consultaste. Si las herramientas no devolvieron "
+                        "resultados, decílo claramente y sugerí alternativas."
+                    ))],
+                ))
+                continue
+
+            # Fallback honesto. NO se guarda en memoria (distorsionaría el contexto).
+            return ("No pude armar una respuesta esta vez. Probá reformulando "
+                    "(por ejemplo, sin signos de puntuación pegados a la consulta, "
+                    "o agregando más contexto).")
+
+        # Excedimos el máximo de iteraciones.
         logger.warning(
-            "Excedido MAX_FUNCTION_CALL_ITERATIONS (%d) para user %s",
-            self.MAX_FUNCTION_CALL_ITERATIONS, user_id,
+            "Excedido MAX_FUNCTION_CALL_ITERATIONS (%d) para user %s, query=%r",
+            self.MAX_FUNCTION_CALL_ITERATIONS, user_id, query,
         )
         return ("Tu consulta requirió más pasos de los esperados. "
                 "Probá dividirla en preguntas más simples.")
