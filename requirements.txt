@@ -1,0 +1,24 @@
+# --- Core ---
+python-dotenv==1.0.1
+
+# --- LLM ---
+google-genai>=0.8.0,<2.0
+
+# --- Bot ---
+python-telegram-bot==21.6
+
+# --- DB ---
+sqlalchemy==2.0.35
+# psycopg2-binary==2.9.9   # descomentar para PostgreSQL en producción
+
+# --- Sheets sync (HTTP simple, sin OAuth, sobre endpoint público de Sheets) ---
+requests==2.32.3
+
+# --- Utilidades ---
+pydantic==2.9.2
+pydantic-settings==2.5.2
+APScheduler==3.10.4
+
+# --- Tests ---
+pytest==8.3.3
+pytest-asyncio==0.24.0

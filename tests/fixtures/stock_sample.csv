@@ -1,0 +1,12 @@
+SKU,Producto,Modelo,Color,Talle,Stock Inicial,Ingresos,Pedidos,Stock Actual,Estado
+REM-CR-BCO-S,Remera,Cuello Redondo,Blanco,S,80,50,0,130,OK
+REM-CR-BCO-M,Remera,Cuello Redondo,Blanco,M,100,100,180,20,OK
+REM-CR-BCO-L,Remera,Cuello Redondo,Blanco,L,80,80,80,80,OK
+REM-DF-NEG-M,Remera,Dry-Fit,Negro,M,30,0,45,-15,COMPRAR
+REM-DF-NEG-L,Remera,Dry-Fit,Negro,L,25,0,35,-10,COMPRAR
+BUZ-CN-GRI-L,Buzo,Canguro,Gris,L,50,50,70,30,OK
+BUZ-CR-GRI-M,Buzo,Cuello Redondo,Gris,M,25,0,30,-5,COMPRAR
+GOR-RES-ROJ,Gorra,Con Respiración,Rojo,Único,20,0,40,-20,COMPRAR
+TAZ-CER-BCA,Taza,Cerámica,Blanco,Único,200,150,280,70,OK
+TAZ-MAG,Taza,Mágica,Negro/Blanco,Único,50,0,60,-10,COMPRAR
+LLA-ACR-RED,Llavero,Acrílico Redondo,Transparente,Único,300,200,300,200,OK
