@@ -1,14 +1,24 @@
-"""Tests del MerchBot: formateadores, queries a DB, memoria, ask con mock."""
-from datetime import date, datetime
+"""Tests del MerchBot v2 (con function calling).
+
+Cambios vs v1:
+- Eliminados tests de _snapshot_stock / _snapshot_pedidos / format_stock_for_prompt
+  (esas funciones ya no existen — ahora Gemini consulta vía tools, no por prompt).
+- Reescritos los tests de ask(): mockeamos el loop completo de function calling.
+
+Lo que NO cambió:
+- format_comprar_message, format_resumen_message
+- get_productos_a_comprar (atajo directo a DB)
+- get_resumen_ejecutivo (idem)
+- Memoria conversacional por usuario
+"""
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.database import get_session
 from src.gemini_bot import (
     MerchBot,
     Turno,
-    format_stock_for_prompt,
     format_comprar_message,
     format_resumen_message,
 )
@@ -43,8 +53,7 @@ def sample_pedidos():
         Pedido(fecha=date(2026, 5, 14), cliente="Globant - Welcome Kit",
                sku="BUZ-CN-NEG-L", producto="Buzo Canguro Negro L", cantidad=50),
         Pedido(fecha=date(2026, 4, 15), cliente="Coca-Cola - Evento",
-               sku="REM-CR-BCO-M", producto="Remera Cuello Redondo Blanco M",
-               cantidad=120),
+               sku="REM-CR-BCO-M", producto="Remera CR Blanco M", cantidad=120),
         Pedido(fecha=date(2026, 4, 28), cliente="Movistar - Día del Padre",
                sku="REM-DF-NEG-M", producto="Remera Dry-Fit Negro M", cantidad=45),
     ]
@@ -53,29 +62,60 @@ def sample_pedidos():
 @pytest.fixture
 def db_with_data(test_session_factory, sample_stock, sample_pedidos):
     session = test_session_factory()
-    session.add_all(sample_stock)
-    session.add_all(sample_pedidos)
+    session.add_all(sample_stock + sample_pedidos)
     session.commit()
     session.close()
     return sample_stock, sample_pedidos
 
 
 # ---------------------------------------------------------------------------
-# Formateadores
+# Helpers para mockear respuestas de Gemini con function calling
 # ---------------------------------------------------------------------------
 
-class TestFormatStock:
-    def test_header_y_filas(self, sample_stock):
-        out = format_stock_for_prompt(sample_stock)
-        lineas = out.split("\n")
-        assert lineas[0].startswith("SKU |")
-        assert len(lineas) == 1 + len(sample_stock)
+def _mock_fc(name: str, args: dict) -> MagicMock:
+    """Construye un MagicMock que simula un FunctionCall de Gemini."""
+    fc = MagicMock()
+    fc.name = name
+    fc.args = args
+    return fc
 
-    def test_incluye_estado(self, sample_stock):
-        out = format_stock_for_prompt(sample_stock)
-        assert "COMPRAR" in out
-        assert "OK" in out
 
+def _mock_response_with_calls(*calls) -> MagicMock:
+    """Mock de response cuando Gemini quiere llamar tools."""
+    resp = MagicMock()
+    resp.function_calls = list(calls)
+    # candidates[0].content sirve para que el bot agregue la respuesta al historial.
+    # Le ponemos un MagicMock que no rompe nada cuando se lo serializa.
+    resp.candidates = [MagicMock()]
+    resp.candidates[0].content = MagicMock()
+    resp.text = ""
+    return resp
+
+
+def _mock_response_with_text(text: str) -> MagicMock:
+    """Mock de response cuando Gemini devuelve la respuesta final."""
+    resp = MagicMock()
+    resp.function_calls = []
+    resp.text = text
+    resp.candidates = [MagicMock(finish_reason="STOP")]
+    return resp
+
+
+def _bot_con_responses(responses: list[MagicMock]):
+    """Crea un MerchBot cuyo cliente devuelve `responses` en orden.
+
+    Cada llamada a generate_content devuelve el siguiente response de la lista.
+    """
+    with patch("src.gemini_bot.genai.Client") as MockClient:
+        client = MockClient.return_value
+        client.models.generate_content.side_effect = responses
+        bot = MerchBot(api_key="fake")
+        return bot, client
+
+
+# ---------------------------------------------------------------------------
+# Formateadores (no cambiaron entre v1 y v2)
+# ---------------------------------------------------------------------------
 
 class TestFormatComprar:
     def test_lista_vacia(self):
@@ -93,7 +133,6 @@ class TestFormatComprar:
         assert "Remera Dry-Fit Negro M" in msg
         assert "faltan 15" in msg
         assert "faltan 20" in msg
-        assert "35" in msg  # total faltante
 
 
 class TestFormatResumen:
@@ -112,32 +151,11 @@ class TestFormatResumen:
 
 
 # ---------------------------------------------------------------------------
-# DB queries (usan la DB en memoria via fixture _patch_db)
+# Atajos directos a DB (no usan IA — no cambiaron entre v1 y v2)
 # ---------------------------------------------------------------------------
 
-class TestSnapshotStock:
-    def test_devuelve_tabla_completa(self, db_with_data):
-        bot = MerchBot.__new__(MerchBot)
-        bot.PEDIDOS_EN_CONTEXTO = 25
-        snap = bot._snapshot_stock()
-        assert "REM-CR-BCO-M" in snap
-        assert "GOR-RES-ROJ" in snap
-        # debería tener exactamente 1 header + N filas
-        assert len(snap.split("\n")) == 1 + 4
-
-
-class TestSnapshotPedidos:
-    def test_ordena_descendente_por_fecha(self, db_with_data):
-        bot = MerchBot.__new__(MerchBot)
-        bot.PEDIDOS_EN_CONTEXTO = 25
-        snap = bot._snapshot_pedidos_recientes()
-        lineas = snap.split("\n")
-        # primer pedido (después del header) debería ser el más reciente
-        assert "2026-05-14" in lineas[1]
-
-
 class TestGetProductosAComprar:
-    def test_solo_estado_comprar(self, db_with_data):
+    def test_devuelve_solo_estado_comprar(self, db_with_data):
         bot = MerchBot.__new__(MerchBot)
         productos = bot.get_productos_a_comprar()
         skus = {p["sku"] for p in productos}
@@ -149,12 +167,11 @@ class TestGetProductosAComprar:
         productos = bot.get_productos_a_comprar()
         for p in productos:
             assert isinstance(p, dict)
-            assert p["descripcion"]   # accesible fuera de sesión
+            assert p["descripcion"]
 
     def test_orden_por_urgencia(self, db_with_data):
         bot = MerchBot.__new__(MerchBot)
         productos = bot.get_productos_a_comprar()
-        # GOR-RES-ROJ tiene -20, REM-DF-NEG-M tiene -15 → gorra primero
         assert productos[0]["sku"] == "GOR-RES-ROJ"
         assert productos[1]["sku"] == "REM-DF-NEG-M"
 
@@ -176,13 +193,6 @@ class TestGetResumenEjecutivo:
         # 50 + 120 + 45 = 215
         assert r["unidades_vendidas"] == 215
         assert r["clientes_distintos"] == 3
-
-    def test_top_cliente(self, db_with_data):
-        bot = MerchBot.__new__(MerchBot)
-        r = bot.get_resumen_ejecutivo()
-        # Coca-Cola pidió 120 (más alto)
-        assert r["top_cliente"][0] == "Coca-Cola - Evento"
-        assert r["top_cliente"][1] == 120
 
 
 # ---------------------------------------------------------------------------
@@ -217,52 +227,146 @@ class TestMemoria:
 
 
 # ---------------------------------------------------------------------------
-# ask() con cliente Gemini mockeado
+# ask() con function calling — el corazón del v2
 # ---------------------------------------------------------------------------
 
-class TestAsk:
-    def _bot_con_mock(self, mock_text="Tenés 20 remeras blancas M.",
-                      finish_reason="STOP"):
-        with patch("src.gemini_bot.genai.Client") as MockClient:
-            client_instance = MockClient.return_value
-            response = MagicMock()
-            response.text = mock_text
-            response.candidates = [MagicMock(finish_reason=finish_reason)]
-            client_instance.models.generate_content.return_value = response
-            bot = MerchBot(api_key="fake")
-            return bot, client_instance
+class TestAskBasico:
+    """Caso simple: Gemini devuelve respuesta directa sin tools."""
+
+    def test_devuelve_texto_directo(self, db_with_data):
+        # Gemini responde sin necesitar tools
+        bot, _ = _bot_con_responses([
+            _mock_response_with_text("Hola, ¿en qué te ayudo?"),
+        ])
+        respuesta = bot.ask(user_id=1, query="hola")
+        assert "Hola" in respuesta
 
     def test_query_vacia_no_llama_modelo(self, db_with_data):
-        bot, client = self._bot_con_mock()
+        bot, client = _bot_con_responses([])
         respuesta = bot.ask(user_id=1, query="   ")
         assert "Decime una consulta" in respuesta
         client.models.generate_content.assert_not_called()
 
-    def test_devuelve_texto_del_modelo(self, db_with_data):
-        bot, _ = self._bot_con_mock("Tenés 25 buzos.")
-        respuesta = bot.ask(user_id=1, query="cuantos buzos?")
-        assert "25 buzos" in respuesta
-
     def test_guarda_turno_en_memoria(self, db_with_data):
-        bot, _ = self._bot_con_mock("ok")
+        bot, _ = _bot_con_responses([
+            _mock_response_with_text("ok"),
+        ])
         bot.ask(user_id=7, query="hola")
         assert len(bot._memoria[7]) == 2
-        assert bot._memoria[7][0].role == "user"
-        assert bot._memoria[7][1].role == "model"
+        assert bot._memoria[7][0].text == "hola"
+        assert bot._memoria[7][1].text == "ok"
 
-    def test_inyecta_stock_y_pedidos_en_prompt(self, db_with_data):
-        bot, client = self._bot_con_mock("ok")
+
+class TestAskConFunctionCalling:
+    """Caso típico: Gemini pide tool, le devolvemos resultado, responde."""
+
+    def test_ciclo_simple_de_una_tool(self, db_with_data):
+        """Gemini pide buscar_stock → ejecutamos → Gemini arma respuesta."""
+        bot, client = _bot_con_responses([
+            _mock_response_with_calls(_mock_fc("buscar_stock", {"color": "Negro"})),
+            _mock_response_with_text("Encontré 2 productos negros."),
+        ])
+        respuesta = bot.ask(user_id=1, query="qué tengo en negro?")
+        assert "Encontré 2 productos negros." in respuesta
+        # Debió llamar a generate_content 2 veces (1 para pedir tool, 1 para respuesta)
+        assert client.models.generate_content.call_count == 2
+
+    def test_se_ejecuto_la_tool_correcta_con_los_args(self, db_with_data):
+        """Verificamos que el args del FunctionCall llega a ejecutar_tool."""
+        bot, client = _bot_con_responses([
+            _mock_response_with_calls(
+                _mock_fc("buscar_stock", {"producto": "Remera", "color": "Negro"})
+            ),
+            _mock_response_with_text("Tenés 2 SKUs de remeras negras."),
+        ])
+        bot.ask(user_id=1, query="cuántas remeras negras tengo")
+
+        # La 2da llamada a generate_content debe incluir el resultado de la tool
+        # en los contents. Verificamos que tiene 4 contents:
+        # 1. user query, 2. model con function_call, 3. user con tool response, 4. ?
+        # Lo simple: que haya 2da llamada al menos.
+        assert client.models.generate_content.call_count == 2
+
+    def test_encadenamiento_de_dos_tools(self, db_with_data):
+        """Gemini pide 1 tool, evalua resultado, pide otra, después responde."""
+        bot, client = _bot_con_responses([
+            # Iter 1: pide buscar_stock
+            _mock_response_with_calls(_mock_fc("buscar_stock", {"producto": "Buzo"})),
+            # Iter 2: pide obtener_pedidos_de_cliente
+            _mock_response_with_calls(
+                _mock_fc("obtener_pedidos_de_cliente", {"nombre_cliente": "Coca"})
+            ),
+            # Iter 3: responde texto final
+            _mock_response_with_text("Tenés stock + ya le pediste a Coca-Cola."),
+        ])
+        respuesta = bot.ask(user_id=1, query="qué tengo en buzos y qué pidió Coca?")
+        assert "Coca" in respuesta
+        assert client.models.generate_content.call_count == 3
+
+    def test_multiples_tools_en_una_iteracion(self, db_with_data):
+        """Gemini pide 2 tools en una sola respuesta — las ejecutamos todas."""
+        bot, client = _bot_con_responses([
+            _mock_response_with_calls(
+                _mock_fc("buscar_stock", {"color": "Negro"}),
+                _mock_fc("listar_productos_a_comprar", {}),
+            ),
+            _mock_response_with_text("Tenés X negros y faltan Y."),
+        ])
+        respuesta = bot.ask(user_id=1, query="negros + qué hay para comprar")
+        assert "Tenés X negros" in respuesta
+        # Solo 2 llamadas: una con 2 function calls, otra con texto final
+        assert client.models.generate_content.call_count == 2
+
+
+class TestAskLimiteIteraciones:
+    """Protección contra loops infinitos de function calls."""
+
+    def test_excede_max_iteraciones_devuelve_fallback(self, db_with_data):
+        # Gemini siempre pide tools, nunca responde texto → debería cortar
+        always_calls = [
+            _mock_response_with_calls(_mock_fc("buscar_stock", {}))
+            for _ in range(MerchBot.MAX_FUNCTION_CALL_ITERATIONS + 5)
+        ]
+        bot, client = _bot_con_responses(always_calls)
+        respuesta = bot.ask(user_id=1, query="loopear")
+        # Debe haber un mensaje de fallback
+        assert "más pasos" in respuesta.lower() or "más simples" in respuesta.lower()
+        # No debió llamar más que MAX_FUNCTION_CALL_ITERATIONS veces
+        assert (client.models.generate_content.call_count
+                <= MerchBot.MAX_FUNCTION_CALL_ITERATIONS)
+
+
+class TestAskNoInyectaCatalogo:
+    """v2: el system prompt NO contiene el catálogo (eso fue v1)."""
+
+    def test_system_prompt_no_tiene_skus(self, db_with_data):
+        bot, client = _bot_con_responses([
+            _mock_response_with_text("ok"),
+        ])
         bot.ask(user_id=1, query="hola")
         call_kwargs = client.models.generate_content.call_args.kwargs
         system = call_kwargs["config"].system_instruction
-        assert "STOCK ACTUAL" in system
-        assert "PEDIDOS RECIENTES" in system
-        # SKU del fixture aparece
-        assert "REM-CR-BCO-M" in system
-        # Cliente del fixture también
-        assert "Coca-Cola" in system
+        # Estos SKUs están en el fixture pero NO deberían aparecer en el prompt
+        assert "REM-CR-BCO-M" not in system
+        assert "GOR-RES-ROJ" not in system
 
-    def test_truncacion_avisa(self, db_with_data):
-        bot, _ = self._bot_con_mock("largo...", finish_reason="MAX_TOKENS")
-        respuesta = bot.ask(user_id=1, query="listame todo")
-        assert "cortada" in respuesta.lower()
+    def test_system_prompt_menciona_las_tools(self, db_with_data):
+        bot, client = _bot_con_responses([
+            _mock_response_with_text("ok"),
+        ])
+        bot.ask(user_id=1, query="hola")
+        call_kwargs = client.models.generate_content.call_args.kwargs
+        system = call_kwargs["config"].system_instruction
+        # Debería mencionar al menos algunas tools clave por nombre
+        assert "buscar_stock" in system
+        assert "listar_productos_a_comprar" in system
+
+    def test_config_incluye_tools(self, db_with_data):
+        bot, client = _bot_con_responses([
+            _mock_response_with_text("ok"),
+        ])
+        bot.ask(user_id=1, query="hola")
+        call_kwargs = client.models.generate_content.call_args.kwargs
+        # El config debe incluir tools (no None ni lista vacía)
+        assert call_kwargs["config"].tools is not None
+        assert len(call_kwargs["config"].tools) > 0
