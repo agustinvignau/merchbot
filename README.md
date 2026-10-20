@@ -2,10 +2,9 @@
 
 **Asistente conversacional de inventario para una empresa de merchandising sublimado.** Se le pregunta en lenguaje natural por stock, pedidos y reposición, y responde con datos reales de la base. Los números salen de consultas SQL ejecutadas por *function calling*; el modelo solo redacta.
 
-> Proyecto de portfolio y trabajo final de *Técnicas de Procesamiento del Habla* (Tecnicatura en Ciencia de Datos e IA, IFTS N°18). Nació como un bot de Telegram y está evolucionando a un asistente web disponible 24/7, con voz, RAG y panel de métricas.
+> Proyecto de portfolio y trabajo final de *Técnicas de Procesamiento del Habla* (Tecnicatura en Ciencia de Datos e IA, IFTS N°18). Nació como un bot de Telegram y hoy tiene interfaz web; está evolucionando a un asistente disponible 24/7, con voz, RAG y panel de métricas.
 
-<!-- Reemplazar por captura o GIF real cuando termine la Fase 1 -->
-<!-- ![Demo de MerchBot](docs/img/demo.gif) -->
+![Chat web de MerchBot con la lista de productos para reponer](docs/img/web-comprar.png)
 
 ## Demo
 
@@ -36,8 +35,8 @@ Los datos de ejemplo son ficticios (`data/Stock_Merchandising_Demo.xlsx`).
 | ✅ | Function calling contra SQLite (stock, pedidos, resumen, reposición) | Hecho |
 | ✅ | Sincronización periódica desde Google Sheets | Hecho |
 | ✅ | Paquete instalable, capa común `ChatService` (Fase 0) | Hecho |
-| ✅ | 110 tests automatizados (Gemini mockeado) | Hecho |
-| 🚧 | Interfaz web (FastAPI + HTML) y Docker | Fase 1 |
+| ✅ | Interfaz web (FastAPI + HTML), memoria persistente, datos de demo y Docker (Fase 1) | Hecho |
+| ✅ | 162 tests automatizados (Gemini mockeado) | Hecho |
 | 🚧 | Registro de interacciones, hora simulada y reclamos | Fase 2 |
 | 🚧 | Panel admin con métricas | Fase 3 |
 | 🚧 | Voz (reconocimiento y síntesis) | Fase 4 |
@@ -53,20 +52,23 @@ Detalle de cada fase en [`docs/PLAN_DE_FASES.md`](docs/PLAN_DE_FASES.md).
 - **El modelo no inventa números.** No se le pasa el catálogo en el prompt: Gemini decide qué función llamar (`buscar_stock`, `obtener_pedidos_de_cliente`, …), el código la ejecuta contra la base y el resultado vuelve al modelo, que arma la respuesta. Escala a miles de SKUs sin tocar el prompt.
 - **Solo lectura sobre el negocio.** El bot no modifica stock ni pedidos. La fuente de verdad sigue siendo la planilla que ya usa la empresa.
 - **Sin migrar el sistema de nadie.** Sincroniza desde un Google Sheets compartido por el endpoint público de exportación: no necesita OAuth ni cuenta de Google Cloud.
-- **Cada capa se puede reemplazar.** Todas las interfaces hablan con `ChatService`, que valida el mensaje y delega en el asistente. Telegram hoy y la web mañana son capas finas por encima; cambiar de modelo no toca las interfaces.
+- **Cada capa se puede reemplazar.** Todas las interfaces hablan con `ChatService`, que valida el mensaje y delega en el asistente. La web y Telegram son capas finas por encima; cambiar de modelo no toca las interfaces.
+- **Se prueba sin nada externo.** Con `DATA_SOURCE=demo` carga una planilla de ejemplo, sin Google Sheets. Los atajos (qué comprar, resumen) no usan IA y responden aunque Gemini no esté disponible.
 - **RAG solo donde corresponde (Fase 5).** El stock es dato estructurado y se consulta con SQL. Los embeddings se reservan para texto libre (políticas, preguntas frecuentes).
 
 ## Arquitectura
 
 ```mermaid
 flowchart LR
-    GS[(Google Sheets<br/>fuente de verdad)] -->|sync cada N min| SY[Sheets Sync]
+    GS[(Google Sheets<br/>o planilla demo)] -->|sync| SY[refresh]
     SY --> DB[(SQLite / PostgreSQL)]
 
-    TG[Telegram] --> CS[ChatService]
-    WEB[Interfaz web<br/>texto y voz] -.->|Fase 1| CS
+    WEB[Web<br/>FastAPI + HTML] --> CS[ChatService]
+    TG[Telegram] --> CS
 
     CS --> BOT[MerchBot<br/>Gemini 2.5 Flash]
+    BOT <--> MEM[(memoria de<br/>conversación)]
+    MEM --> DB
     BOT <-->|function calling| TOOLS[tools.py<br/>consultas SQL]
     TOOLS --> DB
     BOT -.->|Fase 5| RAG[RAG de políticas<br/>embeddings]
@@ -78,10 +80,10 @@ Las líneas punteadas son partes planificadas.
 
 **Flujo de una consulta**
 
-1. El usuario escribe por Telegram.
-2. El handler verifica la whitelist y el rate limit.
+1. El usuario escribe en la web (o en Telegram).
+2. La web identifica la conversación con una cookie de sesión; Telegram verifica la whitelist y el rate limit.
 3. `ChatService.ask()` valida el mensaje (vacío, largo máximo) y lo pasa al asistente.
-4. `MerchBot.ask()` envía la consulta a Gemini junto con las funciones disponibles y el historial reciente.
+4. `MerchBot.ask()` envía la consulta a Gemini junto con las funciones disponibles y los últimos turnos guardados en la base.
 5. Gemini pide ejecutar una o varias funciones; el código las corre contra la base.
 6. Gemini redacta la respuesta con esos resultados y se devuelve al usuario.
 
@@ -91,13 +93,15 @@ Las líneas punteadas son partes planificadas.
 |---|---|
 | Lenguaje | Python 3.11 |
 | LLM | Google Gemini 2.5 Flash (`google-genai`) con function calling |
-| Interfaz actual | python-telegram-bot 21 |
+| Interfaz web | FastAPI + uvicorn, HTML y JavaScript sin framework |
+| Telegram | python-telegram-bot 21 |
 | Base de datos | SQLite (desarrollo) / PostgreSQL (producción), SQLAlchemy 2.0 |
-| Sincronización | `requests` sobre el endpoint público de Google Sheets |
+| Datos | Google Sheets (endpoint público, `requests`) o planilla de demo (`openpyxl`) |
 | Tareas periódicas | APScheduler |
 | Configuración | pydantic-settings |
-| Tests | pytest, pytest-asyncio |
-| Previsto | FastAPI, Docker, Web Speech API, embeddings de Gemini, `transformers` |
+| Tests | pytest, pytest-asyncio, TestClient de FastAPI |
+| Deploy | Docker y docker compose |
+| Previsto | Web Speech API, embeddings de Gemini, `transformers` |
 
 ## Funciones que el modelo puede llamar
 
@@ -112,66 +116,68 @@ Las líneas punteadas son partes planificadas.
 
 ## Cómo correrlo
 
-### Requisitos
+Lo único obligatorio es una API key de [Google AI Studio](https://aistudio.google.com/app/apikey). Sin Google Sheets, MerchBot usa la planilla de demo.
 
-- Python 3.11
-- Una API key de [Google AI Studio](https://aistudio.google.com/app/apikey)
-- Un bot de Telegram creado con [@BotFather](https://t.me/BotFather)
-- Un Google Sheets con las hojas `Stock` y `Pedidos` (usá `data/Stock_Merchandising_Demo.xlsx` como plantilla)
-
-### Instalación
+### Con Docker (recomendado)
 
 ```bash
 git clone https://github.com/agustinvignau/merchbot.git
 cd merchbot
+cp .env.example .env            # completá GEMINI_API_KEY
+docker compose up -d --build
+```
 
+Abrí <http://localhost:8000>. La base queda en un volumen, así que la conversación sobrevive a reinicios.
+
+### Sin Docker
+
+Requiere Python 3.11 o superior.
+
+```bash
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -e ".[dev]"         # instala el paquete y las herramientas de test
-
-cp .env.example .env            # Windows: copy .env.example .env
-```
-
-Completá en `.env`:
-
-```
-GEMINI_API_KEY=...
-TELEGRAM_BOT_TOKEN=...
-SHEETS_ID=...                   # el ID del Sheets compartido como "Cualquiera con el enlace - Lector"
-TELEGRAM_ALLOWED_USER_IDS=      # vacío al principio; ver más abajo
-```
-
-### Probar sin Telegram
-
-```bash
-python scripts/test_sync.py            # verifica la sincronización con el Sheets
-python scripts/test_bot_interactive.py # conversa con el bot desde la terminal
-```
-
-### Arrancar el bot
-
-```bash
+pip install -e ".[dev]"
+cp .env.example .env            # Windows: copy .env.example .env  → completá GEMINI_API_KEY
 python -m merchbot              # o simplemente: merchbot
 ```
-
-### Whitelist (importante)
-
-Sin whitelist, cualquiera que encuentre el bot puede ver el stock y los clientes.
-
-1. Arrancá el bot y escribile `/whoami` para obtener tu ID.
-2. Pegalo en `TELEGRAM_ALLOWED_USER_IDS` (varios IDs separados por coma).
-3. Reiniciá.
 
 ### Comandos
 
 | Comando | Qué hace |
 |---|---|
-| `/start`, `/help` | Bienvenida y ayuda |
-| `/whoami` | Muestra tu ID de Telegram |
-| `/sync` | Fuerza la sincronización con el Sheets |
-| `/comprar` | Lista lo que hay que reponer (sin IA, directo de la base) |
-| `/resumen` | Resumen ejecutivo |
-| `/clear` | Borra el historial de la conversación |
+| `merchbot` o `merchbot web` | Interfaz web en <http://localhost:8000> (`--port` para cambiarlo) |
+| `merchbot telegram` | Bot de Telegram |
+| `merchbot cargar-demo` | Carga la planilla de ejemplo en la base |
+| `python scripts/test_bot_interactive.py` | Conversar con el bot desde la terminal |
+| `python scripts/test_sync.py` | Probar la sincronización con Google Sheets |
+
+### Datos reales con Google Sheets
+
+1. Subí `data/Stock_Merchandising_Demo.xlsx` a Google Drive y abrilo como Hojas de cálculo (o copiá su estructura: hojas `Stock` y `Pedidos`).
+2. **Compartir → Cualquiera con el enlace → Lector** y copiá el ID de la URL.
+3. Poné `SHEETS_ID=...` en `.env`. Con `DATA_SOURCE=auto` (por defecto) pasa a usar Sheets y sincroniza cada `SYNC_INTERVAL_MIN` minutos.
+
+### API web
+
+| Método y ruta | Qué hace |
+|---|---|
+| `POST /api/chat` | Envía `{"message": "..."}` y devuelve `{"reply": "..."}` |
+| `GET /api/historial` | Conversación guardada de esta sesión |
+| `DELETE /api/historial` | Empieza una conversación nueva |
+| `GET /api/comprar` | Productos para reponer (sin IA) |
+| `GET /api/resumen` | Resumen del inventario (sin IA) |
+| `POST /api/sync` | Vuelve a cargar los datos |
+| `GET /health` | Estado del servicio |
+
+La documentación interactiva queda en <http://localhost:8000/docs>.
+
+### Telegram (opcional)
+
+1. Creá un bot con [@BotFather](https://t.me/BotFather) y poné el token en `TELEGRAM_BOT_TOKEN`.
+2. Arrancá con `merchbot telegram` (o `docker compose --profile telegram up -d`).
+3. Escribile `/whoami`, copiá tu ID a `TELEGRAM_ALLOWED_USER_IDS` y reiniciá. **Sin whitelist, cualquiera que encuentre el bot puede ver el stock y los clientes.**
+
+Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear`.
 
 ## Tests
 
@@ -179,7 +185,7 @@ Sin whitelist, cualquiera que encuentre el bot puede ver el stock y los clientes
 pytest
 ```
 
-110 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
+162 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
 
 ## Estructura
 
@@ -191,15 +197,19 @@ merchbot/
 │   ├── timeutils.py             # fechas en UTC con zona horaria
 │   ├── core/
 │   │   ├── chat_service.py      # puerta de entrada común a todas las interfaces
+│   │   ├── memory.py            # memoria de conversación (RAM o base)
 │   │   ├── assistant.py         # MerchBot: Gemini + loop de function calling
 │   │   ├── tools.py             # funciones que llama el modelo (consultas SQL)
 │   │   └── reports.py           # reportes directos sin IA (/comprar, /resumen)
 │   ├── data/
-│   │   ├── models.py            # StockItem, Pedido
+│   │   ├── models.py            # StockItem, Pedido, Mensaje
 │   │   ├── database.py          # engine y sesiones SQLAlchemy
 │   │   ├── sheets_sync.py       # lectura del Sheets y upsert
+│   │   ├── demo_seed.py         # carga de la planilla de demo
+│   │   ├── refresh.py           # elige la fuente según DATA_SOURCE
 │   │   └── scheduler.py         # sync periódico
 │   ├── interfaces/
+│   │   ├── web/                 # app.py (FastAPI) y static/index.html
 │   │   └── telegram/            # bot.py (handlers) y formatters.py
 │   └── security/
 │       └── rate_limiter.py      # anti-spam
@@ -208,22 +218,26 @@ merchbot/
 ├── data/                        # plantilla de demo y script que la genera
 ├── docs/
 │   ├── PLAN_DE_FASES.md         # hoja de ruta detallada
+│   ├── img/                     # capturas
 │   └── Propuesta_MerchBot.pdf
+├── Dockerfile
+├── docker-compose.yml
 ├── pyproject.toml
 └── LICENSE
 ```
 
 ## Seguridad
 
-- Acceso por whitelist de IDs de usuario.
-- Rate limit para usuarios no autorizados, con registro de cada intento denegado.
+- **Web:** cada navegador tiene su conversación, identificada por una cookie `HttpOnly` con un ID aleatorio. El servidor escucha solo en `localhost` por defecto, y en Docker el puerto se publica solo en `127.0.0.1`. Los errores internos no se muestran al usuario.
+- **Telegram:** acceso por whitelist de IDs y rate limit para usuarios no autorizados, con registro de cada intento denegado.
 - El bot no escribe en el Sheets ni modifica stock o pedidos.
 - Las claves se leen del entorno y nunca se versionan (`.env` está en `.gitignore`).
+- El contenedor corre con un usuario sin privilegios.
 
 ## Limitaciones actuales
 
-- La memoria de conversación está en RAM y se pierde al reiniciar (se resuelve en la Fase 1).
-- El bot corre en una PC local, así que no es 24/7 real hasta la Fase 8.
+- **La web todavía no tiene login.** Está pensada para correr en tu máquina; no la expongas a internet hasta la Fase 7 (login y rate limit web).
+- Corre en una PC local, así que no es 24/7 real hasta la Fase 8.
 - La reducción de alucinaciones depende del prompt y de que los datos salgan de funciones; no es cero. La Fase 7 mide la tasa de aciertos con un set de evaluación.
 - Los datos de demo son ficticios; no hay datos de clientes reales en el repositorio.
 
