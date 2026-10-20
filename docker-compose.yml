@@ -1,0 +1,38 @@
+# Uso:
+#   cp .env.example .env    # completar GEMINI_API_KEY (y SHEETS_ID si no usás la demo)
+#   docker compose up -d --build
+#   abrir http://localhost:8000
+services:
+  web:
+    build: .
+    image: merchbot:latest
+    env_file: .env
+    environment:
+      # Dentro del contenedor escucha en todas las interfaces...
+      WEB_HOST: 0.0.0.0
+      DATABASE_URL: sqlite:////app/data/merchbot.db
+    ports:
+      # ...pero el puerto se publica solo en localhost. En un VPS, un proxy
+      # con HTTPS (Caddy o nginx) va adelante; ver docs/PLAN_DE_FASES.md, Fase 8.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - merchbot-data:/app/data   # la base sobrevive a reinicios y rebuilds
+    restart: unless-stopped
+
+  # Bot de Telegram opcional, con la misma base:
+  #   docker compose --profile telegram up -d
+  telegram:
+    image: merchbot:latest
+    command: ["merchbot", "telegram"]
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////app/data/merchbot.db
+    volumes:
+      - merchbot-data:/app/data
+    restart: unless-stopped
+    profiles: ["telegram"]
+    depends_on:
+      - web
+
+volumes:
+  merchbot-data:
