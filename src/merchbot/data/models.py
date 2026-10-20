@@ -12,7 +12,7 @@ Decisión: NO normalizamos en ProductoBase + Variante porque:
 from sqlalchemy import Column, Date, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import declarative_base
 
-from merchbot.timeutils import utc_now
+from merchbot.timeutils import iso_utc, utc_now
 
 
 Base = declarative_base()
@@ -122,7 +122,82 @@ class Mensaje(Base):
     user_id = Column(String(64), nullable=False, index=True)
     role = Column(String(8), nullable=False)        # "user" o "model"
     text = Column(Text, nullable=False)
+    hora = Column(String(5), nullable=True)         # "HH:MM" mostrada al usuario
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Mensaje {self.user_id} {self.role} {self.text[:30]!r}>"
+
+
+class Interaccion(Base):
+    """Registro de cada consulta atendida (requisito del TP y base del panel).
+
+    `hora_simulada` es la hora que eligió el usuario en la demo ("03:20"); si
+    no eligió ninguna, es la hora real local. `created_at` siempre es la real.
+    """
+
+    __tablename__ = "interacciones"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, index=True)
+    canal = Column(String(16), nullable=False, index=True)           # "web" | "telegram"
+    user_id = Column(String(64), nullable=False, index=True)
+    hora_simulada = Column(String(5), nullable=False)                 # "HH:MM"
+    hora_es_simulada = Column(Integer, nullable=False, default=0)     # 0/1
+    fuera_de_horario = Column(Integer, nullable=False, default=0)     # 0/1
+    tipo = Column(String(24), nullable=False, index=True)             # stock, pedidos, reclamo...
+    consulta = Column(Text, nullable=False)
+    respuesta = Column(Text, nullable=True)
+    herramientas = Column(Text, nullable=False, default="")           # separadas por coma
+    duracion_ms = Column(Integer, nullable=False, default=0)
+    estado = Column(String(8), nullable=False, default="ok")          # "ok" | "error"
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "created_at": iso_utc(self.created_at),
+            "canal": self.canal,
+            "user_id": self.user_id,
+            "hora_simulada": self.hora_simulada,
+            "hora_es_simulada": bool(self.hora_es_simulada),
+            "fuera_de_horario": bool(self.fuera_de_horario),
+            "tipo": self.tipo,
+            "consulta": self.consulta,
+            "respuesta": self.respuesta,
+            "herramientas": [h for h in (self.herramientas or "").split(",") if h],
+            "duracion_ms": self.duracion_ms,
+            "estado": self.estado,
+        }
+
+
+TIPOS_RECLAMO = ("producto_defectuoso", "demora", "error_en_pedido", "faltante", "otro")
+ESTADOS_RECLAMO = ("abierto", "en_revision", "resuelto")
+
+
+class Reclamo(Base):
+    """Reclamo registrado por el asistente o desde el formulario."""
+
+    __tablename__ = "reclamos"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, index=True)
+    canal = Column(String(16), nullable=False)
+    user_id = Column(String(64), nullable=False, index=True)
+    hora_simulada = Column(String(5), nullable=False)
+    tipo = Column(String(24), nullable=False, default="otro")
+    descripcion = Column(Text, nullable=False)
+    cliente = Column(String(160), nullable=True)
+    estado = Column(String(16), nullable=False, default="abierto", index=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "numero": self.id,
+            "created_at": iso_utc(self.created_at),
+            "canal": self.canal,
+            "hora": self.hora_simulada,
+            "tipo": self.tipo,
+            "descripcion": self.descripcion,
+            "cliente": self.cliente,
+            "estado": self.estado,
+        }
+

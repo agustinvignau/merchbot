@@ -20,6 +20,7 @@ dependencies = [
     "pydantic-settings==2.5.2",
     "APScheduler==3.10.4",
     "openpyxl>=3.1,<4",
+    "tzdata",                      # zonas horarias en Windows
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.30,<1",
 ]
