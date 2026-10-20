@@ -1,0 +1,25 @@
+texto,tipo,sentimiento,prioridad
+"Llegaron 20 remeras blancas M con manchas de tinta, así no las puedo entregar",producto_defectuoso,NEG,alta
+"Es la segunda vez que me mandan las gorras rojas descosidas. Un desastre.",producto_defectuoso,NEG,alta
+"El pedido para el evento de mañana todavía no llegó, necesito una solución urgente",demora,NEG,alta
+"Me faltan 5 buzos del pedido de Globant",faltante,NEG,media
+"Pedí talle L y vinieron todas M",error_en_pedido,NEG,media
+"Los colores no son los de la muestra que aprobamos, quedaron muy apagados",producto_defectuoso,NEG,media
+"El pedido viene con un día de demora, avisen cuando salga por favor",demora,NEU,baja
+"Quería avisar que una taza llegó con el logo un poco corrido, nada grave",producto_defectuoso,NEU,baja
+"Pésima atención, nadie me responde hace tres días y tengo 300 remeras paradas",demora,NEG,alta
+"Una de las 50 chombas vino con una costura floja",producto_defectuoso,NEU,baja
+"Me mandaron 100 llaveros con el logo de otro cliente!!! Inaceptable",error_en_pedido,NEG,alta
+"Hola, creo que en la factura figura una cantidad distinta a la que pedí",otro,NEU,baja
+"Las remeras están bien pero la caja llegó rota",otro,NEU,baja
+"Estoy muy enojado, el estampado se despegó al primer lavado en todas las prendas",producto_defectuoso,NEG,alta
+"Sigo esperando el reemplazo de las prendas falladas, ya pasó una semana",demora,NEG,media
+"Gracias por la rapidez, solo aviso que faltó una gorra",faltante,POS,baja
+"Excelente trabajo como siempre, solamente una remera vino con una mancha chiquita",producto_defectuoso,POS,baja
+"No llegaron los buzos y el evento es hoy a la tarde",demora,NEG,alta
+"El talle XL de las dry-fit vino más chico que la tabla",producto_defectuoso,NEU,media
+"Faltan 40 tazas del pedido de Movistar, necesitamos que las manden cuanto antes",faltante,NEG,alta
+"Les escribo para cambiar el color de las gorras de un pedido que todavía no salió",otro,NEU,baja
+"Horrible la calidad de la impresión, se ve pixelada en los 200 buzos",producto_defectuoso,NEG,alta
+"Recibí el pedido completo, pero una remera tiene un hilo suelto",producto_defectuoso,NEU,baja
+"Me cobraron envío cuando habíamos quedado en retirar por el depósito",otro,NEG,media
