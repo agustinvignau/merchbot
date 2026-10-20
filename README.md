@@ -40,8 +40,8 @@ Los datos de ejemplo son ficticios (`data/Stock_Merchandising_Demo.xlsx`).
 | ✅ | Panel admin con métricas y gestión de reclamos (Fase 3) | Hecho |
 | ✅ | Voz: dictado, normalización y lectura en voz alta (Fase 4) | Hecho |
 | ✅ | RAG de políticas y procedimientos, con evaluación (Fase 5) | Hecho |
-| ✅ | 348 tests automatizados (Gemini mockeado) | Hecho |
-| 🚧 | Sentimiento y prioridad de reclamos | Fase 6 |
+| ✅ | Sentimiento y prioridad explicable de reclamos, con evaluación (Fase 6) | Hecho |
+| ✅ | 375 tests automatizados (Gemini mockeado) | Hecho |
 | 🚧 | Set de evaluación, login y rate limit web | Fase 7 |
 | 🚧 | Deploy 24/7 en VPS | Fase 8 |
 
@@ -81,6 +81,10 @@ Las conversaciones de ejemplo se generan con `python scripts/demo_dialogos.py` y
 Las preguntas de procedimientos (plazos, pedido mínimo, cambios, guía de talles, envíos, formato del logo) se responden con fragmentos de `data/politicas.md`, un documento de ejemplo. Se indexa con embeddings de Gemini y se busca por similitud de coseno; si no hay API key, con BM25. La respuesta nombra la sección en que se basa y, si las políticas no dicen nada, el asistente lo admite en vez de inventar. `scripts/evaluar_rag.py` mide qué tan bien encuentra la sección correcta. Detalle en [`docs/RAG.md`](docs/RAG.md).
 
 ![Respuesta sobre plazos de entrega con la sección de las políticas en que se basa](docs/img/web-politicas.png)
+
+## Reclamos priorizados
+
+Cada reclamo se analiza al registrarse: tono (negativo, neutro o positivo) y una prioridad de 0 a 100 que suma el tipo de reclamo, el tono, la urgencia ("el evento es mañana"), el volumen ("faltan 150 buzos") y la reincidencia ("otra vez"). El panel los ordena por prioridad, muestra los motivos y marca los que necesitan una persona. El tono se mide con un léxico propio en español o, si se instala, con RoBERTuito (`transformers`). VADER, el analizador de NLTK, se evaluó y se descartó porque su diccionario es en inglés: acierta 42 % contra 88 % del léxico en el set de prueba. Detalle y limitaciones en [`docs/SENTIMIENTO.md`](docs/SENTIMIENTO.md).
 
 ## Voz
 
@@ -146,7 +150,7 @@ Las líneas punteadas son partes planificadas.
 | Deploy | Docker y docker compose |
 | Voz | Web Speech API del navegador (reconocimiento y síntesis) |
 | RAG | Embeddings de Gemini (`gemini-embedding-001`), numpy, BM25 propio de respaldo |
-| Previsto | `transformers` (sentimiento de reclamos) |
+| Sentimiento | Léxico propio en español; RoBERTuito con `transformers` (opcional, `pip install -e ".[nlp]"`) |
 
 ## Funciones que el modelo puede llamar
 
@@ -197,6 +201,7 @@ python -m merchbot              # o simplemente: merchbot
 | `merchbot telegram` | Bot de Telegram |
 | `merchbot cargar-demo` | Carga la planilla de ejemplo en la base |
 | `merchbot indexar-politicas` | Vuelve a indexar `data/politicas.md` después de editarlo |
+| `python scripts/evaluar_sentimiento.py` | Compara léxico, VADER y RoBERTuito sobre reclamos etiquetados |
 | `python scripts/evaluar_rag.py` | Mide la recuperación del RAG (léxica y semántica) |
 | `python scripts/test_bot_interactive.py` | Conversar con el bot desde la terminal |
 | `python scripts/test_sync.py` | Probar la sincronización con Google Sheets |
@@ -249,7 +254,7 @@ Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear
 pytest
 ```
 
-348 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
+375 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
 
 ## Estructura
 
@@ -267,6 +272,8 @@ merchbot/
 │   │   ├── metricas.py          # métricas del panel
 │   │   ├── normalizacion.py     # números y talles dictados → forma de los datos
 │   │   ├── rag/                 # fragmentos, embeddings, BM25 e índice de políticas
+│   │   ├── sentimiento.py       # tono de los reclamos (léxico o transformers)
+│   │   ├── prioridad.py         # prioridad 0-100 con motivos
 │   │   ├── assistant.py         # MerchBot: Gemini + loop de function calling
 │   │   ├── tools.py             # funciones que llama el modelo (consultas SQL)
 │   │   └── reports.py           # reportes directos sin IA (/comprar, /resumen)
@@ -284,12 +291,14 @@ merchbot/
 │       └── rate_limiter.py      # anti-spam
 ├── tests/                       # espejo de src/merchbot (core, data, interfaces, security)
 ├── scripts/                     # REPL, prueba de sync y guion de diálogos de demo
-├── data/                        # planilla de demo y políticas de ejemplo (politicas.md)
+├── data/                        # planilla de demo, políticas de ejemplo y sets de evaluación
 ├── docs/
 │   ├── PLAN_DE_FASES.md         # hoja de ruta detallada
 │   ├── VOZ.md                   # cómo funciona la voz, límites y privacidad
 │   ├── RAG.md                   # diseño del RAG y evaluación
 │   ├── EVALUACION_RAG.md        # resultados de scripts/evaluar_rag.py
+│   ├── SENTIMIENTO.md           # sentimiento y prioridad de reclamos
+│   ├── EVALUACION_SENTIMIENTO.md  # resultados de scripts/evaluar_sentimiento.py
 │   ├── img/                     # capturas
 │   └── Propuesta_MerchBot.pdf
 ├── Dockerfile
