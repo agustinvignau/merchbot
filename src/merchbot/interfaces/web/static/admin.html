@@ -113,6 +113,11 @@
   .estado-abierto { background: var(--amarillo-fondo); color: #6B4E00; }
   .estado-en_revision { background: var(--cian-fondo); color: #0A5568; }
   .estado-resuelto { background: var(--verde-fondo); color: var(--verde); }
+  .prioridad-alta { background: var(--magenta); color: #fff; }
+  .prioridad-media { background: var(--amarillo-fondo); color: #6B4E00; }
+  .prioridad-baja { background: var(--grilla); color: var(--tinta-suave); }
+  .prioridad-ninguna { background: none; color: var(--tinta-tenue); }
+  .humano { color: var(--magenta-hover); font-weight: 700; white-space: nowrap; }
   .estado-ok { background: var(--verde-fondo); color: var(--verde); }
   .estado-error { background: var(--magenta-fondo); color: var(--magenta-hover); }
   .luna { font-weight: 700; color: var(--noche); }
@@ -199,7 +204,7 @@
 
     <section class="tarjeta" aria-labelledby="t-reclamos">
       <h2 id="t-reclamos">Reclamos</h2>
-      <p class="sub" id="reclamos-sub">Cambiá el estado a medida que el equipo los revisa.</p>
+      <p class="sub" id="reclamos-sub">Ordenados por prioridad: los urgentes primero y, a igual prioridad, los que esperan hace más. La prioridad sale del tipo, el tono, la urgencia y el volumen del reclamo; pasá el mouse para ver por qué.</p>
       <div class="filtros-tabla">
         <label>Mostrar
           <select id="f-reclamos">
@@ -209,6 +214,13 @@
             <option value="resuelto">Resueltos</option>
           </select>
         </label>
+        <label>Orden
+          <select id="f-orden">
+            <option value="prioridad" selected>Por prioridad</option>
+            <option value="recientes">Más recientes</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="f-humano"> Solo los que necesitan una persona</label>
       </div>
       <div class="tabla-envoltorio" id="tabla-reclamos"></div>
     </section>
@@ -296,7 +308,7 @@
       cifra("Fuera de horario", `${t.porcentaje_fuera_de_horario.toLocaleString("es-AR")} %`, `${miles(t.fuera_de_horario)} consultas sin nadie en el depósito`, true),
       cifra("Tiempo de respuesta", ms(t.duracion_mediana_ms), `mediana; el 95 % en menos de ${ms(t.duracion_p95_ms)}`),
       cifra("Con error", `${t.porcentaje_errores.toLocaleString("es-AR")} %`, `${miles(t.errores)} consulta(s)`),
-      cifra("Reclamos abiertos", miles(t.reclamos_abiertos), `${miles(m.reclamos.por_estado.en_revision)} en revisión`),
+      cifra("Reclamos abiertos", miles(t.reclamos_abiertos), `${miles(m.reclamos.requieren_humano)} necesitan una persona, ${miles(m.reclamos.por_estado.en_revision)} en revisión`),
       cifra("Por voz", `${t.porcentaje_por_voz.toLocaleString("es-AR")} %`, `${miles(t.por_voz)} consulta(s) dictada(s)`),
     ].join("");
   }
@@ -366,13 +378,25 @@
   }
 
   // ---------- reclamos ----------
+  const NOMBRES_PRIORIDAD = { alta: "Alta", media: "Media", baja: "Baja" };
+  const NOMBRES_SENTIMIENTO = { NEG: "negativo", NEU: "neutro", POS: "positivo" };
+  function marcaPrioridad(r) {
+    if (!r.prioridad) return '<span class="marca-estado prioridad-ninguna" title="Registrado antes del análisis automático">—</span>';
+    const detalle = [`Puntaje ${r.prioridad_puntaje}/100`, `tono ${NOMBRES_SENTIMIENTO[r.sentimiento] || r.sentimiento}`, ...r.motivos].join("\n");
+    const humano = r.requiere_humano ? '<br><small class="humano">necesita una persona</small>' : "";
+    return `<span class="marca-estado prioridad-${escapar(r.prioridad)}" title="${escapar(detalle)}">${NOMBRES_PRIORIDAD[r.prioridad]} ${escapar(r.prioridad_puntaje)}</span>${humano}`;
+  }
+
   async function cargarReclamos() {
-    const estado = $("#f-reclamos").value;
-    const { reclamos } = await api(`/api/admin/reclamos${estado ? `?estado=${estado}` : ""}`);
+    const p = new URLSearchParams({ orden: $("#f-orden").value });
+    if ($("#f-reclamos").value) p.set("estado", $("#f-reclamos").value);
+    if ($("#f-humano").checked) p.set("solo_humano", "true");
+    const { reclamos } = await api(`/api/admin/reclamos?${p}`);
     if (!reclamos.length) { $("#tabla-reclamos").innerHTML = '<p class="vacio">No hay reclamos con ese estado.</p>'; return; }
-    $("#tabla-reclamos").innerHTML = `<table><thead><tr><th class="num">N.º</th><th>Hora</th><th>Canal</th><th>Tipo</th><th>Qué pasó</th><th>Cliente</th><th>Estado</th></tr></thead><tbody>${
+    $("#tabla-reclamos").innerHTML = `<table><thead><tr><th class="num">N.º</th><th>Prioridad</th><th>Hora</th><th>Canal</th><th>Tipo</th><th>Qué pasó</th><th>Cliente</th><th>Estado</th></tr></thead><tbody>${
       reclamos.map((r) => `<tr>
         <td class="num">${escapar(r.numero)}</td>
+        <td>${marcaPrioridad(r)}</td>
         <td>${escapar(r.hora)}</td>
         <td>${escapar(r.canal)}</td>
         <td>${escapar(NOMBRES_RECLAMO[r.tipo] || r.tipo)}</td>
@@ -434,7 +458,7 @@
   }
 
   ["#f-periodo", "#f-canal"].forEach((s) => $(s).addEventListener("change", cargarTodo));
-  $("#f-reclamos").addEventListener("change", () => cargarReclamos().catch(alertar));
+  ["#f-reclamos", "#f-orden", "#f-humano"].forEach((s) => $(s).addEventListener("change", () => cargarReclamos().catch(alertar)));
   ["#f-tipo", "#f-fuera", "#f-errores"].forEach((s) => $(s).addEventListener("change", () => cargarInteracciones().catch(alertar)));
   $("#btn-recargar").addEventListener("click", cargarTodo);
   $("#btn-mas").addEventListener("click", () => { limiteInter = 100; cargarInteracciones().catch(alertar); });

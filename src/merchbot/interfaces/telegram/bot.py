@@ -305,6 +305,8 @@ async def cmd_reclamo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if resultado.get("fuera_de_horario")
         else "Lo revisa una persona del equipo."
     )
+    if resultado.get("requiere_humano"):
+        cuando += " Quedó marcado como prioritario."
     await update.message.reply_text(f"✅ Reclamo #{resultado['numero']} registrado. {cuando}")
 
 

@@ -14,6 +14,7 @@ Cada función devuelve un dict serializable a JSON (Gemini lo recibe así).
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from sqlalchemy import func
@@ -310,8 +311,11 @@ def registrar_reclamo(
 
     `_contexto` lo completa el código (canal, usuario, hora), nunca el modelo.
 
+    El reclamo se analiza al registrarse (sentimiento y prioridad). Si el análisis
+    falla, el reclamo se guarda igual.
+
     Returns:
-        dict con "ok", "numero", "tipo" y "estado".
+        dict con "ok", "numero", "tipo", "estado", "prioridad" y "requiere_humano".
     """
     descripcion = (descripcion or "").strip()
     if len(descripcion) < 5:
@@ -329,10 +333,31 @@ def registrar_reclamo(
             descripcion=descripcion[:2000],
             cliente=(cliente or "").strip()[:160] or None,
         )
+        _analizar_reclamo(reclamo)
         session.add(reclamo)
         session.flush()
         datos = reclamo.to_dict()
     return {"ok": True, **datos}
+
+
+def _analizar_reclamo(reclamo: Reclamo) -> None:
+    """Completa sentimiento y prioridad. Nunca impide registrar el reclamo."""
+    from merchbot.core.prioridad import calcular_prioridad
+    from merchbot.core.sentimiento import obtener_analizador
+
+    try:
+        sentimiento = obtener_analizador().analizar(reclamo.descripcion)
+        prioridad = calcular_prioridad(reclamo.descripcion, reclamo.tipo, sentimiento)
+    except Exception:
+        logging.getLogger(__name__).exception("No pude analizar el reclamo; queda sin prioridad")
+        return
+    reclamo.sentimiento = sentimiento.etiqueta
+    reclamo.sentimiento_puntaje = sentimiento.puntaje
+    reclamo.prioridad = prioridad.nivel
+    reclamo.prioridad_puntaje = prioridad.puntaje
+    reclamo.requiere_humano = int(prioridad.requiere_humano)
+    reclamo.motivos = " | ".join(prioridad.motivos)
+    reclamo.analisis_motor = sentimiento.motor
 
 
 def consultar_estado_reclamo(numero: int) -> dict:

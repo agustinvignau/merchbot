@@ -62,6 +62,18 @@ def calcular_metricas(dias: Optional[int] = 7, canal: Optional[str] = None) -> d
         reclamos_por_estado = {e: 0 for e in ESTADOS_RECLAMO}
         for estado, n in session.query(Reclamo.estado, func.count()).group_by(Reclamo.estado):
             reclamos_por_estado[estado] = int(n)
+        reclamos_urgentes = (
+            session.query(Reclamo)
+            .filter(Reclamo.estado != "resuelto", Reclamo.requiere_humano == 1)
+            .count()
+        )
+        reclamos_por_prioridad = {"alta": 0, "media": 0, "baja": 0}
+        for nivel, n in (
+            session.query(Reclamo.prioridad, func.count())
+            .filter(Reclamo.estado != "resuelto").group_by(Reclamo.prioridad)
+        ):
+            if nivel in reclamos_por_prioridad:
+                reclamos_por_prioridad[nivel] = int(n)
         reclamos_por_tipo = {
             t: int(n) for t, n in session.query(Reclamo.tipo, func.count()).group_by(Reclamo.tipo)
         }
@@ -102,16 +114,34 @@ def calcular_metricas(dias: Optional[int] = 7, canal: Optional[str] = None) -> d
         "por_tipo": dict(sorted(por_tipo.items(), key=lambda kv: -kv[1])),
         "por_canal": dict(sorted(por_canal.items(), key=lambda kv: -kv[1])),
         "herramientas": dict(sorted(herramientas.items(), key=lambda kv: -kv[1])),
-        "reclamos": {"por_estado": reclamos_por_estado, "por_tipo": reclamos_por_tipo},
+        "reclamos": {
+            "por_estado": reclamos_por_estado,
+            "por_tipo": reclamos_por_tipo,
+            "pendientes_por_prioridad": reclamos_por_prioridad,
+            "requieren_humano": reclamos_urgentes,
+        },
     }
 
 
-def listar_reclamos(estado: Optional[str] = None, limite: int = 200) -> list[dict]:
+def listar_reclamos(
+    estado: Optional[str] = None,
+    limite: int = 200,
+    orden: str = "prioridad",
+    solo_humano: bool = False,
+) -> list[dict]:
+    """Reclamos. Con orden="prioridad", los más urgentes primero y, a igual
+    prioridad, los más viejos primero (llevan más tiempo esperando)."""
     with get_session() as session:
         q = session.query(Reclamo)
         if estado:
             q = q.filter(Reclamo.estado == estado)
-        return [r.to_dict() for r in q.order_by(Reclamo.id.desc()).limit(max(1, min(limite, 1000)))]
+        if solo_humano:
+            q = q.filter(Reclamo.requiere_humano == 1)
+        if orden == "prioridad":
+            q = q.order_by(func.coalesce(Reclamo.prioridad_puntaje, -1).desc(), Reclamo.id.asc())
+        else:
+            q = q.order_by(Reclamo.id.desc())
+        return [r.to_dict() for r in q.limit(max(1, min(limite, 1000)))]
 
 
 def cambiar_estado_reclamo(numero: int, estado: str) -> Optional[dict]:
