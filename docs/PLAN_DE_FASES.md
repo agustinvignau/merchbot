@@ -18,7 +18,7 @@ La entrega final es **presencial con defensa individual**: cada fase tiene que s
 
 | Fase | Nombre | Qué suma | Cubre del enunciado | Meta |
 |---|---|---|---|---|
-| 0 | Base saneada | Rama, limpieza, capa de servicio común | — | 22/10 |
+| 0 | Base saneada ✅ | Paquete `merchbot`, capa de servicio común, limpieza | — | Hecha 20/10 |
 | 1 | Interfaz web + Docker | Chat en el navegador, deploy local con un comando | Interfaz conversacional | 25/10 |
 | 2 | Registro, hora simulada y reclamos | Tabla de interacciones, selector de hora, `/reclamo` | Registro, cualquier hora, 4+ situaciones | 28/10 |
 | 3 | Panel admin con métricas | Dashboard de uso y reclamos | Realismo, valor demostrable | 30/10 (preentrega) |
@@ -32,18 +32,20 @@ Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance den
 
 ---
 
-## Fase 0 — Base saneada
+## Fase 0 — Base saneada ✅
+
+> **Hecha el 20/10.** Paquete instalable en `src/merchbot/` (core, data, interfaces, security), `pyproject.toml`, `ChatService`, reportes separados del asistente, fechas con zona horaria, `LICENSE`, `SHEETS_ID` reemplazado por placeholder. 110 tests en verde.
 
 **Objetivo.** Dejar el repo listo para crecer sin romper lo que ya anda.
 
 **Qué se hace**
 - Crear la rama `web-ui` (nada se toca en `main` hasta que una fase esté terminada).
-- Extraer un `ChatService` (`src/core/chat_service.py`) que envuelve `MerchBot.ask()` y queda como **única puerta de entrada** para Telegram y web. Así las dos interfaces comparten lógica.
+- Extraer un `ChatService` (`src/merchbot/core/chat_service.py`) que envuelve `MerchBot.ask()` y queda como **única puerta de entrada** para Telegram y web. Así las dos interfaces comparten lógica.
 - Reemplazar `datetime.utcnow()` (deprecado) por fechas con zona horaria.
 - Sacar de `.env.example` el `SHEETS_ID` real y poner un placeholder (el repo va a ser público en el portfolio).
 - Revisar que `data/merchbot.db` y `.env` no estén versionados.
 
-**Archivos:** `src/core/chat_service.py`, `src/models.py`, `.env.example`, `.gitignore`.
+**Archivos:** `src/merchbot/core/chat_service.py`, `src/merchbot/data/models.py`, `.env.example`, `.gitignore`.
 
 **Hecho cuando**
 - `pytest` sigue en verde (hoy 98 tests).
@@ -58,13 +60,13 @@ Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance den
 **Objetivo.** Salir de Telegram: un chat en el navegador que corre local con un comando y se despliega igual en un VPS.
 
 **Qué se hace**
-- Backend **FastAPI** (`src/web/app.py`) con `POST /api/chat`, `GET /api/historial`, `GET /health`.
-- Frontend de un solo archivo (`src/web/static/index.html`): burbujas de chat, indicador de "escribiendo…", responsive. Sin build ni Node.
+- Backend **FastAPI** (`src/merchbot/interfaces/web/app.py`) con `POST /api/chat`, `GET /api/historial`, `GET /health`.
+- Frontend de un solo archivo (`src/merchbot/interfaces/web/static/index.html`): burbujas de chat, indicador de "escribiendo…", responsive. Sin build ni Node.
 - Memoria de conversación persistida en la base (hoy está en RAM y se pierde al reiniciar).
 - `Dockerfile` y `docker-compose.yml`; configuración 100% por `.env`.
-- Telegram se mantiene como segunda interfaz opcional (`python -m src.main --telegram`).
+- Telegram se mantiene como segunda interfaz opcional (`python -m merchbot --telegram`).
 
-**Archivos nuevos:** `src/web/app.py`, `src/web/static/index.html`, `Dockerfile`, `docker-compose.yml`.
+**Archivos nuevos:** `src/merchbot/interfaces/web/app.py`, `src/merchbot/interfaces/web/static/index.html`, `Dockerfile`, `docker-compose.yml`.
 
 **Hecho cuando**
 - `docker compose up` levanta el chat en `http://localhost:8000`.
@@ -88,7 +90,7 @@ Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance den
 - Cuatro situaciones diferenciadas y documentadas: **stock, pedidos de un cliente, reposición (qué comprar) y reclamos**.
 - Guion de **4 a 5 conversaciones de demo** en distintos horarios (para capturas y para la defensa).
 
-**Archivos:** `src/models.py` (tablas nuevas), `src/tools.py` (`registrar_reclamo`), `src/core/chat_service.py` (registro), UI.
+**Archivos:** `src/merchbot/data/models.py` (tablas nuevas), `src/merchbot/core/tools.py` (`registrar_reclamo`), `src/merchbot/core/chat_service.py` (registro), UI.
 
 **Hecho cuando**
 - Cada intercambio queda en `interacciones` con hora simulada.

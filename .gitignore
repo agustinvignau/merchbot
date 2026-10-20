@@ -44,3 +44,9 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Artefactos de herramientas
+pytest-cache-files-*/
+*.egg-info/
+build/
+dist/

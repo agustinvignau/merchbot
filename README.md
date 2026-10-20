@@ -35,7 +35,8 @@ Los datos de ejemplo son ficticios (`data/Stock_Merchandising_Demo.xlsx`).
 | ✅ | Bot de Telegram con whitelist y anti-spam | Hecho |
 | ✅ | Function calling contra SQLite (stock, pedidos, resumen, reposición) | Hecho |
 | ✅ | Sincronización periódica desde Google Sheets | Hecho |
-| ✅ | 98 tests automatizados (Gemini mockeado) | Hecho |
+| ✅ | Paquete instalable, capa común `ChatService` (Fase 0) | Hecho |
+| ✅ | 110 tests automatizados (Gemini mockeado) | Hecho |
 | 🚧 | Interfaz web (FastAPI + HTML) y Docker | Fase 1 |
 | 🚧 | Registro de interacciones, hora simulada y reclamos | Fase 2 |
 | 🚧 | Panel admin con métricas | Fase 3 |
@@ -52,7 +53,7 @@ Detalle de cada fase en [`docs/PLAN_DE_FASES.md`](docs/PLAN_DE_FASES.md).
 - **El modelo no inventa números.** No se le pasa el catálogo en el prompt: Gemini decide qué función llamar (`buscar_stock`, `obtener_pedidos_de_cliente`, …), el código la ejecuta contra la base y el resultado vuelve al modelo, que arma la respuesta. Escala a miles de SKUs sin tocar el prompt.
 - **Solo lectura sobre el negocio.** El bot no modifica stock ni pedidos. La fuente de verdad sigue siendo la planilla que ya usa la empresa.
 - **Sin migrar el sistema de nadie.** Sincroniza desde un Google Sheets compartido por el endpoint público de exportación: no necesita OAuth ni cuenta de Google Cloud.
-- **Cada capa se puede reemplazar.** La lógica vive en `MerchBot.ask()`; Telegram y la web son interfaces finas por encima.
+- **Cada capa se puede reemplazar.** Todas las interfaces hablan con `ChatService`, que valida el mensaje y delega en el asistente. Telegram hoy y la web mañana son capas finas por encima; cambiar de modelo no toca las interfaces.
 - **RAG solo donde corresponde (Fase 5).** El stock es dato estructurado y se consulta con SQL. Los embeddings se reservan para texto libre (políticas, preguntas frecuentes).
 
 ## Arquitectura
@@ -79,9 +80,10 @@ Las líneas punteadas son partes planificadas.
 
 1. El usuario escribe por Telegram.
 2. El handler verifica la whitelist y el rate limit.
-3. `MerchBot.ask()` envía la consulta a Gemini junto con las funciones disponibles y el historial reciente.
-4. Gemini pide ejecutar una o varias funciones; el código las corre contra la base.
-5. Gemini redacta la respuesta con esos resultados y se devuelve al usuario.
+3. `ChatService.ask()` valida el mensaje (vacío, largo máximo) y lo pasa al asistente.
+4. `MerchBot.ask()` envía la consulta a Gemini junto con las funciones disponibles y el historial reciente.
+5. Gemini pide ejecutar una o varias funciones; el código las corre contra la base.
+6. Gemini redacta la respuesta con esos resultados y se devuelve al usuario.
 
 ## Stack
 
@@ -125,7 +127,7 @@ cd merchbot
 
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e ".[dev]"         # instala el paquete y las herramientas de test
 
 cp .env.example .env            # Windows: copy .env.example .env
 ```
@@ -149,7 +151,7 @@ python scripts/test_bot_interactive.py # conversa con el bot desde la terminal
 ### Arrancar el bot
 
 ```bash
-python -m src.main
+python -m merchbot              # o simplemente: merchbot
 ```
 
 ### Whitelist (importante)
@@ -177,29 +179,38 @@ Sin whitelist, cualquiera que encuentre el bot puede ver el stock y los clientes
 pytest
 ```
 
-98 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
+110 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
 
 ## Estructura
 
 ```
 merchbot/
-├── data/                       # plantilla de demo y script que la genera
+├── src/merchbot/
+│   ├── __main__.py              # punto de entrada (python -m merchbot)
+│   ├── config.py                # variables de entorno (pydantic-settings)
+│   ├── timeutils.py             # fechas en UTC con zona horaria
+│   ├── core/
+│   │   ├── chat_service.py      # puerta de entrada común a todas las interfaces
+│   │   ├── assistant.py         # MerchBot: Gemini + loop de function calling
+│   │   ├── tools.py             # funciones que llama el modelo (consultas SQL)
+│   │   └── reports.py           # reportes directos sin IA (/comprar, /resumen)
+│   ├── data/
+│   │   ├── models.py            # StockItem, Pedido
+│   │   ├── database.py          # engine y sesiones SQLAlchemy
+│   │   ├── sheets_sync.py       # lectura del Sheets y upsert
+│   │   └── scheduler.py         # sync periódico
+│   ├── interfaces/
+│   │   └── telegram/            # bot.py (handlers) y formatters.py
+│   └── security/
+│       └── rate_limiter.py      # anti-spam
+├── tests/                       # espejo de src/merchbot (core, data, interfaces, security)
+├── scripts/                     # prueba de sync y REPL del bot
+├── data/                        # plantilla de demo y script que la genera
 ├── docs/
-│   ├── PLAN_DE_FASES.md        # hoja de ruta detallada
+│   ├── PLAN_DE_FASES.md         # hoja de ruta detallada
 │   └── Propuesta_MerchBot.pdf
-├── scripts/                    # prueba de sync y REPL del bot
-├── src/
-│   ├── config.py               # variables de entorno
-│   ├── database.py             # engine SQLAlchemy
-│   ├── models.py               # StockItem, Pedido
-│   ├── sheets_sync.py          # lectura del Sheets y upsert
-│   ├── scheduler.py            # sync periódico
-│   ├── rate_limiter.py         # anti-spam
-│   ├── tools.py                # funciones que llama el modelo
-│   ├── gemini_bot.py           # MerchBot
-│   ├── telegram_bot.py         # interfaz de Telegram
-│   └── main.py
-└── tests/
+├── pyproject.toml
+└── LICENSE
 ```
 
 ## Seguridad
