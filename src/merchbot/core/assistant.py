@@ -16,21 +16,25 @@ Por qué importa:
 from __future__ import annotations
 
 import logging
-from collections import defaultdict, deque
-from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 from google import genai
 from google.genai import types as genai_types
 
 from merchbot.config import settings
+from merchbot.core.memory import (
+    ConversationStore,
+    InMemoryConversationStore,
+    Turno,
+    UserId,
+)
 from merchbot.core.tools import ejecutar_tool
+
+__all__ = ["MerchBot", "Turno", "UserId", "SYSTEM_INSTRUCTION"]
 
 
 logger = logging.getLogger(__name__)
 
-# Identificador de usuario: int en Telegram, str (id de sesión) en la web.
-UserId = Union[int, str]
 
 
 # ---------------------------------------------------------------------------
@@ -180,12 +184,6 @@ _TOOLS = [genai_types.Tool(function_declarations=_build_function_declarations())
 # Datos de turno (memoria conversacional)
 # ---------------------------------------------------------------------------
 
-@dataclass(slots=True)
-class Turno:
-    role: str   # "user" o "model"
-    text: str
-
-
 # ---------------------------------------------------------------------------
 # MerchBot
 # ---------------------------------------------------------------------------
@@ -209,11 +207,12 @@ class MerchBot:
         self,
         api_key: Optional[str] = None,
         modelo: Optional[str] = None,
+        store: Optional[ConversationStore] = None,
     ) -> None:
         self.modelo = modelo or settings.gemini_model
         self.client = genai.Client(api_key=api_key or settings.gemini_api_key)
-        self._memoria: dict[UserId, deque[Turno]] = defaultdict(
-            lambda: deque(maxlen=self.HISTORIAL_MAX_TURNOS)
+        self.memoria: ConversationStore = store or InMemoryConversationStore(
+            max_turnos=self.HISTORIAL_MAX_TURNOS
         )
 
     # ---- Conversación con Gemini + function calling ----------------------
@@ -223,7 +222,7 @@ class MerchBot:
     ) -> list[genai_types.Content]:
         """Arma el historial conversacional + nueva pregunta."""
         contenidos: list[genai_types.Content] = []
-        for turno in self._memoria[user_id]:
+        for turno in self.memoria.history(user_id):
             contenidos.append(
                 genai_types.Content(
                     role=turno.role,
@@ -317,8 +316,8 @@ class MerchBot:
             respuesta = (response.text or "").strip()
 
             if respuesta:
-                self._memoria[user_id].append(Turno(role="user", text=query))
-                self._memoria[user_id].append(Turno(role="model", text=respuesta))
+                self.memoria.append(user_id, "user", query)
+                self.memoria.append(user_id, "model", respuesta)
                 return respuesta
 
             # ★ Texto VACÍO sin function calls.
@@ -359,6 +358,4 @@ class MerchBot:
                 "Probá dividirla en preguntas más simples.")
 
     def clear_memory(self, user_id: UserId) -> int:
-        n = len(self._memoria.get(user_id, []))
-        self._memoria.pop(user_id, None)
-        return n
+        return self.memoria.clear(user_id)

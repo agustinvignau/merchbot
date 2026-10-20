@@ -15,11 +15,19 @@ from typing import Callable, Optional
 
 from merchbot.core import reports
 from merchbot.core.assistant import MerchBot, UserId
+from merchbot.core.memory import SqlConversationStore, Turno
 
 
 logger = logging.getLogger(__name__)
 
 MAX_MESSAGE_LEN = 2000
+HISTORIAL_VISIBLE = 50
+
+
+def crear_asistente_persistente() -> MerchBot:
+    """Asistente con memoria guardada en la base (sobrevive a reinicios)."""
+    return MerchBot(store=SqlConversationStore(max_turnos=MerchBot.HISTORIAL_MAX_TURNOS))
+
 
 MENSAJE_VACIO = (
     "Decime una consulta. Ej: '¿cuántas remeras negras M tengo?', "
@@ -37,7 +45,7 @@ class ChatService:
     def __init__(
         self,
         assistant: Optional[MerchBot] = None,
-        assistant_factory: Callable[[], MerchBot] = MerchBot,
+        assistant_factory: Callable[[], MerchBot] = crear_asistente_persistente,
     ) -> None:
         self._assistant = assistant
         self._assistant_factory = assistant_factory
@@ -64,6 +72,10 @@ class ChatService:
         duracion_ms = int((time.perf_counter() - inicio) * 1000)
         logger.info("Consulta respondida user=%s en %d ms", user_id, duracion_ms)
         return respuesta
+
+    def history(self, user_id: UserId, limit: int = HISTORIAL_VISIBLE) -> list[Turno]:
+        """Conversación guardada del usuario, para mostrarla en pantalla."""
+        return self.assistant.memoria.history(user_id, limit=limit)
 
     def clear(self, user_id: UserId) -> int:
         """Borra el historial del usuario. Devuelve cuántos turnos había."""
