@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     atencion_hasta: str = "18:00"
     atencion_dias: str = "0,1,2,3,4"   # 0 = lunes ... 6 = domingo
 
+    # --- Panel admin (/admin) ---
+    # Sin clave, el panel queda deshabilitado.
+    admin_key: str = ""
+
     # --- App ---
     log_level: str = "INFO"
     app_env: str = "development"

@@ -12,6 +12,7 @@ Endpoints:
     GET    /api/horario    hora real y horario de atención
     POST   /api/sync       actualiza la base desde la fuente de datos
     GET    /health         estado del servicio
+    GET    /admin          panel de métricas (API en /api/admin, ver admin.py)
 
 Cada navegador tiene su propia conversación, identificada con una cookie de
 sesión (`merchbot_sid`). La lógica vive en ChatService, igual que en Telegram.
@@ -38,6 +39,7 @@ from merchbot.config import settings
 from merchbot.core.chat_service import MAX_MESSAGE_LEN, ChatService, get_chat_service
 from merchbot.core.horario import dias_habiles, resolver_momento, validar_hora
 from merchbot.data.models import TIPOS_RECLAMO
+from merchbot.interfaces.web.admin import router as admin_router
 
 
 logger = logging.getLogger(__name__)
@@ -255,6 +257,11 @@ def create_app(
             "pedidos": resultado.pedidos_total,
         }
 
+    @app.get("/admin", include_in_schema=False)
+    def admin() -> FileResponse:
+        return FileResponse(STATIC_DIR / "admin.html")
+
+    app.include_router(admin_router)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app
 
