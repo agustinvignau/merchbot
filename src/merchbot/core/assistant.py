@@ -16,12 +16,14 @@ Por qué importa:
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import Optional
 
 from google import genai
 from google.genai import types as genai_types
 
 from merchbot.config import settings
+from merchbot.core.horario import Momento, resolver_momento
 from merchbot.core.memory import (
     ConversationStore,
     InMemoryConversationStore,
@@ -30,11 +32,18 @@ from merchbot.core.memory import (
 )
 from merchbot.core.tools import ejecutar_tool
 
-__all__ = ["MerchBot", "Turno", "UserId", "SYSTEM_INSTRUCTION"]
+__all__ = ["MerchBot", "Respuesta", "Turno", "UserId", "SYSTEM_INSTRUCTION"]
 
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass
+class Respuesta:
+    """Resultado de una consulta al asistente."""
+    texto: str
+    herramientas: list[str] = field(default_factory=list)  # funciones que llamó el modelo
+    completa: bool = True   # False si se cayó a un mensaje de respaldo
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_INSTRUCTION = """Sos un asistente de gestión de stock para una empresa argentina de merchandising sublimado.
 La empresa compra productos base (remeras, buzos, gorras, tazas, etc.) y los personaliza con logos de clientes.
-Usuarios: encargado de depósito y dueño/gerente.
+Usuarios: encargado de depósito, dueño/gerente y vendedores. Atendés las 24 horas.
 
 CÓMO TRABAJÁS:
 Cuando el usuario te pregunta algo, USÁS LAS HERRAMIENTAS (functions) disponibles para consultar la base de datos.
@@ -56,6 +65,9 @@ GUÍA DE QUÉ HERRAMIENTA USAR:
 - "últimos pedidos" / "qué se vendió" → listar_pedidos_recientes
 - "dame un resumen" / "cómo estamos" → obtener_resumen_ejecutivo
 - "¿qué productos manejás?" / "qué categorías hay" → listar_categorias_disponibles
+- El usuario cuenta un problema (prenda fallada, pedido demorado o equivocado, faltante) → registrar_reclamo.
+  Si falta información clave (qué pasó), preguntala antes de registrar. Confirmá con el número de reclamo.
+- "¿cómo va mi reclamo 12?" → consultar_estado_reclamo(numero=12)
 
 PODÉS ENCADENAR HERRAMIENTAS si la pregunta lo amerita.
 Ej: "necesito 200 buzos grises L para Coca-Cola, ¿alcanzo?" →
@@ -70,7 +82,8 @@ REGLAS DE RESPUESTA:
 5. No hablés de las herramientas en tu respuesta — el usuario no las ve, le hablás como un asistente humano.
 6. Máximo 1 emoji por respuesta (⚠️ para stock crítico, ✅ para confirmación, sino ninguno).
 7. No manejás precios — si te preguntan, decí "no manejo precios, solo stock".
-8. Si la pregunta no es de stock o pedidos, redirigí: "Solo puedo ayudarte con consultas de stock o pedidos."
+8. Si la pregunta no es de stock, pedidos o reclamos, redirigí: "Solo puedo ayudarte con stock, pedidos y reclamos."
+9. Al registrar un reclamo, decí el número y qué pasa después (lo revisa una persona; si es fuera de horario, el próximo día hábil).
 """
 
 
@@ -173,6 +186,43 @@ def _build_function_declarations() -> list[genai_types.FunctionDeclaration]:
             ),
             parameters_json_schema={"type": "object", "properties": {}},
         ),
+        genai_types.FunctionDeclaration(
+            name="registrar_reclamo",
+            description=(
+                "Registra un reclamo del usuario y devuelve el número asignado. Usala "
+                "cuando el usuario informa un problema con un producto o un pedido."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "descripcion": {
+                        "type": "string",
+                        "description": "Qué pasó, en palabras claras y completas (ej. 'Llegaron 20 remeras blancas M con manchas de tinta').",
+                    },
+                    "tipo": {
+                        "type": "string",
+                        "enum": ["producto_defectuoso", "demora", "error_en_pedido", "faltante", "otro"],
+                        "description": "Categoría del reclamo.",
+                    },
+                    "cliente": {
+                        "type": "string",
+                        "description": "Cliente o pedido involucrado, si se mencionó.",
+                    },
+                },
+                "required": ["descripcion", "tipo"],
+            },
+        ),
+        genai_types.FunctionDeclaration(
+            name="consultar_estado_reclamo",
+            description="Devuelve el estado de un reclamo a partir de su número.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "numero": {"type": "integer", "description": "Número de reclamo."},
+                },
+                "required": ["numero"],
+            },
+        ),
     ]
 
 
@@ -246,7 +296,21 @@ class MerchBot:
             return "?"
 
     def ask(self, user_id: UserId, query: str) -> str:
+        """Atajo que devuelve solo el texto de la respuesta."""
+        return self.responder(user_id, query).texto
+
+    def responder(
+        self,
+        user_id: UserId,
+        query: str,
+        momento: Optional[Momento] = None,
+        canal: str = "desconocido",
+    ) -> Respuesta:
         """Pregunta principal con loop de function calling.
+
+        `momento` es la hora (real o simulada) de la consulta: se le informa al
+        modelo para que sepa si es fuera de horario. `canal` y la hora se pasan
+        como contexto a las funciones que lo necesitan (registrar_reclamo).
 
         Flujo:
         - Iteramos mandando contents + tools a Gemini.
@@ -258,8 +322,13 @@ class MerchBot:
           resultados (típico con queries ambiguas, ej. "talle m?" en vez de "talle M").
         """
         if not query or not query.strip():
-            return ("Decime una consulta. Ej: '¿cuántas remeras negras M tengo?', "
-                    "'qué pidió Coca-Cola', 'qué hay que comprar'.")
+            return Respuesta("Decime una consulta. Ej: '¿cuántas remeras negras M tengo?', "
+                             "'qué pidió Coca-Cola', 'qué hay que comprar'.")
+
+        momento = momento or resolver_momento()
+        instrucciones = f"{SYSTEM_INSTRUCTION}\n{momento.contexto_para_el_modelo()}"
+        contexto_tools = {"canal": canal, "user_id": str(user_id), "hora": momento.hora}
+        herramientas: list[str] = []
 
         contents = self._build_initial_contents(user_id, query)
         had_tool_calls = False       # algún turno previo pidió tools
@@ -270,7 +339,7 @@ class MerchBot:
                 model=self.modelo,
                 contents=contents,
                 config=genai_types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
+                    system_instruction=instrucciones,
                     tools=_TOOLS,
                     temperature=0.3,
                     max_output_tokens=2048,
@@ -291,7 +360,8 @@ class MerchBot:
                 tool_response_parts = []
                 for fc in function_calls:
                     args = dict(fc.args) if fc.args else {}
-                    result = ejecutar_tool(fc.name, args)
+                    herramientas.append(fc.name)
+                    result = ejecutar_tool(fc.name, args, contexto_tools)
                     # Loguear args + resumen del resultado para diagnóstico
                     resumen_result = (
                         f"keys={list(result.keys())[:4]}"
@@ -316,9 +386,9 @@ class MerchBot:
             respuesta = (response.text or "").strip()
 
             if respuesta:
-                self.memoria.append(user_id, "user", query)
-                self.memoria.append(user_id, "model", respuesta)
-                return respuesta
+                self.memoria.append(user_id, "user", query, hora=momento.hora)
+                self.memoria.append(user_id, "model", respuesta, hora=momento.hora)
+                return Respuesta(respuesta, herramientas)
 
             # ★ Texto VACÍO sin function calls.
             # Loguear con detalle para entender qué pasó (mejora B).
@@ -345,17 +415,25 @@ class MerchBot:
                 continue
 
             # Fallback honesto. NO se guarda en memoria (distorsionaría el contexto).
-            return ("No pude armar una respuesta esta vez. Probá reformulando "
-                    "(por ejemplo, sin signos de puntuación pegados a la consulta, "
-                    "o agregando más contexto).")
+            return Respuesta(
+                "No pude armar una respuesta esta vez. Probá reformulando "
+                "(por ejemplo, sin signos de puntuación pegados a la consulta, "
+                "o agregando más contexto).",
+                herramientas,
+                completa=False,
+            )
 
         # Excedimos el máximo de iteraciones.
         logger.warning(
             "Excedido MAX_FUNCTION_CALL_ITERATIONS (%d) para user %s, query=%r",
             self.MAX_FUNCTION_CALL_ITERATIONS, user_id, query,
         )
-        return ("Tu consulta requirió más pasos de los esperados. "
-                "Probá dividirla en preguntas más simples.")
+        return Respuesta(
+            "Tu consulta requirió más pasos de los esperados. "
+            "Probá dividirla en preguntas más simples.",
+            herramientas,
+            completa=False,
+        )
 
     def clear_memory(self, user_id: UserId) -> int:
         return self.memoria.clear(user_id)

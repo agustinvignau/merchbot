@@ -14,12 +14,12 @@ Cada función devuelve un dict serializable a JSON (Gemini lo recibe así).
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import func
 
 from merchbot.data.database import get_session
-from merchbot.data.models import StockItem, Pedido
+from merchbot.data.models import TIPOS_RECLAMO, Pedido, Reclamo, StockItem
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +297,58 @@ def listar_categorias_disponibles() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Reclamos (las únicas funciones que escriben, y solo en la tabla reclamos)
+# ---------------------------------------------------------------------------
+
+def registrar_reclamo(
+    descripcion: str,
+    tipo: str = "otro",
+    cliente: Optional[str] = None,
+    _contexto: Optional[dict] = None,
+) -> dict:
+    """Registra un reclamo y devuelve su número.
+
+    `_contexto` lo completa el código (canal, usuario, hora), nunca el modelo.
+
+    Returns:
+        dict con "ok", "numero", "tipo" y "estado".
+    """
+    descripcion = (descripcion or "").strip()
+    if len(descripcion) < 5:
+        return {"ok": False, "error": "Falta la descripción del problema. Pedile al usuario que lo cuente."}
+    tipo = (tipo or "otro").strip().lower().replace(" ", "_")
+    if tipo not in TIPOS_RECLAMO:
+        tipo = "otro"
+    ctx = _contexto or {}
+    with get_session() as session:
+        reclamo = Reclamo(
+            canal=ctx.get("canal", "desconocido"),
+            user_id=str(ctx.get("user_id", "desconocido")),
+            hora_simulada=ctx.get("hora", "00:00"),
+            tipo=tipo,
+            descripcion=descripcion[:2000],
+            cliente=(cliente or "").strip()[:160] or None,
+        )
+        session.add(reclamo)
+        session.flush()
+        datos = reclamo.to_dict()
+    return {"ok": True, **datos}
+
+
+def consultar_estado_reclamo(numero: int) -> dict:
+    """Devuelve el estado de un reclamo por su número."""
+    try:
+        numero = int(numero)
+    except (TypeError, ValueError):
+        return {"encontrado": False, "error": "El número de reclamo tiene que ser un número entero."}
+    with get_session() as session:
+        reclamo = session.get(Reclamo, numero)
+        if reclamo is None:
+            return {"encontrado": False, "numero": numero}
+        return {"encontrado": True, **reclamo.to_dict()}
+
+
+# ---------------------------------------------------------------------------
 # Mapeo nombre -> función (para que el bot pueda ejecutar dinámicamente)
 # ---------------------------------------------------------------------------
 
@@ -307,10 +359,27 @@ TOOLS_MAP = {
     "listar_pedidos_recientes": listar_pedidos_recientes,
     "obtener_resumen_ejecutivo": obtener_resumen_ejecutivo,
     "listar_categorias_disponibles": listar_categorias_disponibles,
+    "registrar_reclamo": registrar_reclamo,
+    "consultar_estado_reclamo": consultar_estado_reclamo,
+}
+
+# Funciones que reciben el contexto de la conversación (canal, usuario, hora).
+TOOLS_CON_CONTEXTO = {"registrar_reclamo"}
+
+# Tipo de consulta según la función usada (para el registro de interacciones).
+TIPO_POR_TOOL = {
+    "buscar_stock": "stock",
+    "listar_categorias_disponibles": "stock",
+    "obtener_pedidos_de_cliente": "pedidos",
+    "listar_pedidos_recientes": "pedidos",
+    "listar_productos_a_comprar": "reposicion",
+    "obtener_resumen_ejecutivo": "resumen",
+    "registrar_reclamo": "reclamo",
+    "consultar_estado_reclamo": "reclamo",
 }
 
 
-def ejecutar_tool(nombre: str, args: dict) -> dict:
+def ejecutar_tool(nombre: str, args: dict, contexto: Optional[dict[str, Any]] = None) -> dict:
     """Ejecuta una tool por nombre con los args que mandó Gemini.
 
     Si el nombre no existe o falla la ejecución, devuelve un dict con error
@@ -320,8 +389,12 @@ def ejecutar_tool(nombre: str, args: dict) -> dict:
     fn = TOOLS_MAP.get(nombre)
     if fn is None:
         return {"error": f"Tool '{nombre}' no existe."}
+    # Los argumentos que empiezan con "_" son internos: el modelo no puede mandarlos.
+    args = {k: v for k, v in (args or {}).items() if not str(k).startswith("_")}
+    if nombre in TOOLS_CON_CONTEXTO:
+        args["_contexto"] = contexto or {}
     try:
-        return fn(**(args or {}))
+        return fn(**args)
     except TypeError as e:
         # Args inválidos (ej. parámetro de más, o tipo incorrecto)
         return {"error": f"Args inválidos para '{nombre}': {e}"}

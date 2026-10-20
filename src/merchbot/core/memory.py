@@ -27,6 +27,7 @@ ROLES_VALIDOS = ("user", "model")
 class Turno:
     role: str   # "user" o "model"
     text: str
+    hora: Optional[str] = None   # "HH:MM" (real o simulada) en que se dijo
 
 
 class ConversationStore(Protocol):
@@ -36,7 +37,7 @@ class ConversationStore(Protocol):
         Sin `limit` devuelve la ventana que ve el modelo (`max_turnos`).
         """
 
-    def append(self, user_id: UserId, role: str, text: str) -> None:
+    def append(self, user_id: UserId, role: str, text: str, hora: Optional[str] = None) -> None:
         """Agrega un turno al final."""
 
     def clear(self, user_id: UserId) -> int:
@@ -54,9 +55,9 @@ class InMemoryConversationStore:
         turnos = list(self._data.get(str(user_id), ()))
         return turnos[-limit:] if limit else turnos
 
-    def append(self, user_id: UserId, role: str, text: str) -> None:
+    def append(self, user_id: UserId, role: str, text: str, hora: Optional[str] = None) -> None:
         _validar_rol(role)
-        self._data[str(user_id)].append(Turno(role=role, text=text))
+        self._data[str(user_id)].append(Turno(role=role, text=text, hora=hora))
 
     def clear(self, user_id: UserId) -> int:
         return len(self._data.pop(str(user_id), ()))
@@ -75,12 +76,12 @@ class SqlConversationStore:
                 .limit(limit or self.max_turnos)
                 .all()
             )
-            return [Turno(role=f.role, text=f.text) for f in reversed(filas)]
+            return [Turno(role=f.role, text=f.text, hora=f.hora) for f in reversed(filas)]
 
-    def append(self, user_id: UserId, role: str, text: str) -> None:
+    def append(self, user_id: UserId, role: str, text: str, hora: Optional[str] = None) -> None:
         _validar_rol(role)
         with get_session() as session:
-            session.add(Mensaje(user_id=str(user_id), role=role, text=text))
+            session.add(Mensaje(user_id=str(user_id), role=role, text=text, hora=hora))
 
     def clear(self, user_id: UserId) -> int:
         with get_session() as session:
