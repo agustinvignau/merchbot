@@ -69,6 +69,7 @@ class ChatReply(BaseModel):
     fuera_de_horario: bool
     tipo: str
     consulta: str = Field(..., description="La consulta como la procesó el asistente (normalizada si fue dictada)")
+    fuentes: list[str] = Field(default_factory=list, description="Secciones de las políticas en que se basó la respuesta")
 
 
 class Turno(BaseModel):
@@ -167,7 +168,7 @@ def create_app(
         try:
             a = svc.atender(sid, body.message, canal="web", hora_simulada=hora, origen=body.origen)
             return ChatReply(reply=a.texto, hora=a.hora, fuera_de_horario=a.fuera_de_horario,
-                             tipo=a.tipo, consulta=a.consulta)
+                             tipo=a.tipo, consulta=a.consulta, fuentes=a.fuentes)
         except Exception:
             logger.exception("Error procesando mensaje de %s", sid)
             raise HTTPException(
@@ -270,12 +271,14 @@ def create_app(
 
 
 def _arranque() -> None:
-    """Prepara la base y la fuente de datos al iniciar el servidor."""
+    """Prepara la base, la fuente de datos y el índice de políticas al iniciar el servidor."""
+    from merchbot.core.rag import indexar_sin_fallar
     from merchbot.data.database import init_db
     from merchbot.data.scheduler import start_scheduler
 
     init_db()
     start_scheduler()  # hace la primera carga y, con Sheets, el sync periódico
+    indexar_sin_fallar()
 
 
 def run(host: Optional[str] = None, port: Optional[int] = None) -> None:

@@ -295,6 +295,14 @@
   .boton-enviar:disabled { background: #B9C1CC; cursor: not-allowed; }
   .ayuda { max-width: var(--ancho); margin: -0.35rem auto 0; padding: 0 1rem 0.6rem; font-size: 0.8rem; color: var(--tinta-suave); }
   .sello .voz { font-weight: 700; color: var(--magenta-hover); }
+  .fuentes {
+    margin-left: 0.95rem;
+    font-size: 0.78rem;
+    color: var(--cian);
+    border-top: 1px dashed var(--linea);
+    padding-top: 0.2rem;
+    align-self: flex-start;
+  }
 
   /* ---------- Formulario de reclamo ---------- */
   dialog {
@@ -374,6 +382,8 @@
           <li><button class="etiqueta" data-pregunta="¿Cuántas remeras negras talle M tengo?" type="button">Remeras negras talle M</button></li>
           <li><button class="etiqueta" data-pregunta="¿Qué pidió Coca-Cola?" type="button">Pedidos de Coca-Cola</button></li>
           <li><button class="etiqueta" data-pregunta="Necesito 200 buzos canguro grises L para un evento, ¿me alcanza?" type="button">¿Alcanzan 200 buzos grises L?</button></li>
+          <li><button class="etiqueta" data-pregunta="¿Cuánto tarda en estar listo un pedido de 150 remeras?" type="button">¿Cuánto tarda un pedido?</button></li>
+          <li><button class="etiqueta" data-pregunta="¿Puedo cambiar prendas que llegaron con una falla?" type="button">Cambios por falla</button></li>
           <li><button class="etiqueta" data-tipo="reclamo" data-accion="reclamo" type="button">Dejar un reclamo</button></li>
         </ul>
       </section>
@@ -509,7 +519,16 @@
     return div;
   }
   const agregarUsuario = (t, hora, fuera) => agregar(escapar(t), "mensaje-usuario", hora, fuera);
-  const agregarBot = (t, hora) => agregar(formatear(t), "mensaje-bot", hora);
+  function agregarBot(t, hora, fuentes = []) {
+    const div = agregar(formatear(t), "mensaje-bot", hora);
+    if (fuentes.length) {
+      const p = document.createElement("span");
+      p.className = "fuentes";
+      p.textContent = `Según las políticas: ${fuentes.join(", ")}`;
+      div.appendChild(p);
+    }
+    return div;
+  }
 
   function agregarError(texto, reintentar) {
     const div = agregar(escapar(texto), "mensaje-error");
@@ -565,7 +584,7 @@
         // Mostrar cómo quedó la consulta después de normalizar lo dictado.
         usuario.querySelector(".burbuja").textContent = r.consulta;
       }
-      agregarBot(r.reply, r.hora);
+      agregarBot(r.reply, r.hora, r.fuentes || []);
       if (origen === "voz" || leerRespuestas()) hablar(r.reply);
     } catch (e) {
       indicador.remove();

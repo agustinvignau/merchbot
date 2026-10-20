@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from merchbot.core import reports, tools
@@ -51,6 +51,7 @@ class Atencion:
     fuera_de_horario: bool
     tipo: str
     consulta: str = ""   # la consulta tal como la procesó el asistente (normalizada si fue dictada)
+    fuentes: list[str] = field(default_factory=list)   # secciones de políticas usadas
 
 
 class ChatService:
@@ -117,7 +118,8 @@ class ChatService:
             origen=origen,
         )
         logger.info("Consulta %s respondida user=%s en %d ms", tipo, user_id, duracion)
-        return Atencion(respuesta.texto, momento.hora, momento.fuera_de_horario, tipo, consulta=texto)
+        return Atencion(respuesta.texto, momento.hora, momento.fuera_de_horario, tipo, consulta=texto,
+                        fuentes=list(respuesta.fuentes))
 
     def ask(self, user_id: UserId, message: str, canal: str = "web",
             hora_simulada: Optional[str] = None) -> str:

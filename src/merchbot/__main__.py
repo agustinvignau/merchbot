@@ -5,6 +5,7 @@ Uso:
     python -m merchbot web --port 9000
     python -m merchbot telegram        # bot de Telegram (long-polling)
     python -m merchbot cargar-demo     # carga la planilla de ejemplo en la base
+    python -m merchbot indexar-politicas  # (re)indexa data/politicas.md para el RAG
 
 Instalado con pip, también funciona como comando: `merchbot web`.
 """
@@ -44,6 +45,9 @@ def _telegram(_: argparse.Namespace) -> int:
     _cabecera("telegram")
     init_db()
     start_scheduler()
+    from merchbot.core.rag import indexar_sin_fallar
+
+    indexar_sin_fallar()
     try:
         run_telegram_bot()
     finally:
@@ -60,6 +64,16 @@ def _cargar_demo(_: argparse.Namespace) -> int:
     resultado = cargar_datos_demo()
     print(resultado.resumen())
     return 0 if resultado.ok else 1
+
+
+def _indexar(_: argparse.Namespace) -> int:
+    from merchbot.core.rag import indexar
+    from merchbot.data.database import init_db
+
+    init_db()
+    resultado = indexar()
+    print(resultado.resumen())
+    return 1 if resultado.fragmentos == 0 else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -79,6 +93,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     demo = sub.add_parser("cargar-demo", help="carga la planilla de ejemplo en la base")
     demo.set_defaults(func=_cargar_demo)
+
+    rag = sub.add_parser("indexar-politicas", help="indexa data/politicas.md para el RAG")
+    rag.set_defaults(func=_indexar)
 
     return parser
 

@@ -225,6 +225,7 @@
             <option value="reposicion">Reposición</option>
             <option value="reclamo">Reclamo</option>
             <option value="resumen">Resumen</option>
+            <option value="politicas">Políticas</option>
             <option value="conversacion">Conversación</option>
           </select>
         </label>
@@ -241,7 +242,7 @@
   const $ = (s) => document.querySelector(s);
   const escapar = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const miles = (n) => Number(n ?? 0).toLocaleString("es-AR");
-  const NOMBRES_TIPO = { stock: "Stock", pedidos: "Pedidos", reposicion: "Reposición", reclamo: "Reclamo", resumen: "Resumen", conversacion: "Conversación" };
+  const NOMBRES_TIPO = { stock: "Stock", pedidos: "Pedidos", reposicion: "Reposición", reclamo: "Reclamo", resumen: "Resumen", politicas: "Políticas", conversacion: "Conversación" };
   const NOMBRES_ESTADO = { abierto: "Abierto", en_revision: "En revisión", resuelto: "Resuelto" };
   const NOMBRES_RECLAMO = { producto_defectuoso: "Producto fallado", demora: "Demora", error_en_pedido: "Error en el pedido", faltante: "Faltante", otro: "Otro" };
   const NOMBRES_TOOL = {
@@ -249,6 +250,7 @@
     obtener_pedidos_de_cliente: "Pedidos de un cliente", listar_pedidos_recientes: "Pedidos recientes",
     obtener_resumen_ejecutivo: "Resumen", listar_categorias_disponibles: "Categorías",
     registrar_reclamo: "Registrar reclamo", consultar_estado_reclamo: "Consultar reclamo",
+    consultar_politicas: "Consultar políticas (RAG)",
     atajo_comprar: "Atajo: qué comprar", atajo_resumen: "Atajo: resumen", formulario_reclamo: "Formulario de reclamo",
   };
   let horario = { atencion_desde: "09:00", atencion_hasta: "18:00" };

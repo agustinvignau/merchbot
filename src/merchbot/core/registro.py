@@ -17,7 +17,7 @@ from merchbot.data.models import Interaccion
 logger = logging.getLogger(__name__)
 
 # Prioridad cuando el modelo usó varias funciones: el tipo más "fuerte" gana.
-_PRIORIDAD_TIPO = ("reclamo", "reposicion", "pedidos", "stock", "resumen")
+_PRIORIDAD_TIPO = ("reclamo", "reposicion", "pedidos", "stock", "politicas", "resumen")
 
 
 def clasificar(herramientas: Iterable[str]) -> str:

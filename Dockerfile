@@ -16,8 +16,8 @@ COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 RUN pip install .
 
-# Planilla de demo (DATA_SOURCE=demo) y carpeta de la base SQLite
-COPY data/Stock_Merchandising_Demo.xlsx ./data/
+# Planilla de demo (DATA_SOURCE=demo), políticas para el RAG y carpeta de la base SQLite
+COPY data/Stock_Merchandising_Demo.xlsx data/politicas.md ./data/
 RUN mkdir -p /app/data && chown -R merchbot:merchbot /app/data
 
 USER merchbot
@@ -25,7 +25,8 @@ USER merchbot
 ENV WEB_HOST=0.0.0.0 \
     WEB_PORT=8000 \
     DATABASE_URL=sqlite:////app/data/merchbot.db \
-    DEMO_XLSX_PATH=/app/data/Stock_Merchandising_Demo.xlsx
+    DEMO_XLSX_PATH=/app/data/Stock_Merchandising_Demo.xlsx \
+    POLITICAS_PATH=/app/data/politicas.md
 
 EXPOSE 8000
 
