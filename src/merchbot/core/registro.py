@@ -65,11 +65,23 @@ def registrar_interaccion(
         return None
 
 
-def listar_interacciones(limite: int = 100, canal: Optional[str] = None) -> list[dict]:
+def listar_interacciones(
+    limite: int = 100,
+    canal: Optional[str] = None,
+    tipo: Optional[str] = None,
+    solo_fuera_de_horario: bool = False,
+    solo_errores: bool = False,
+) -> list[dict]:
     """Últimas interacciones, de la más nueva a la más vieja."""
     limite = max(1, min(limite, 1000))
     with get_session() as session:
         q = session.query(Interaccion)
         if canal:
             q = q.filter(Interaccion.canal == canal)
+        if tipo:
+            q = q.filter(Interaccion.tipo == tipo)
+        if solo_fuera_de_horario:
+            q = q.filter(Interaccion.fuera_de_horario == 1)
+        if solo_errores:
+            q = q.filter(Interaccion.estado == "error")
         return [i.to_dict() for i in q.order_by(Interaccion.id.desc()).limit(limite).all()]
