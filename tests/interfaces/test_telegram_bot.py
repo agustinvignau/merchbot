@@ -1,10 +1,6 @@
 """Tests de utilidades del bot de Telegram (sin red)."""
-from unittest.mock import patch
-
-import pytest
-
-import src.config as config_module
-from src.telegram_bot import (
+import merchbot.config as config_module
+from merchbot.interfaces.telegram.bot import (
     _chunk_message,
     es_usuario_autorizado,
     TELEGRAM_MAX_MSG_LEN,

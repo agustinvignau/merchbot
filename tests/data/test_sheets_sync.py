@@ -5,9 +5,10 @@ guardado como fixture que tiene la estructura idéntica a la respuesta real.
 """
 from datetime import date
 
-from src.database import get_session
-from src.models import StockItem, Pedido
-from src.sheets_sync import (
+from merchbot.data.database import get_session
+from merchbot.data.models import StockItem, Pedido
+from merchbot.timeutils import utc_now
+from merchbot.data.sheets_sync import (
     parse_stock_csv,
     parse_pedidos_csv,
     _upsert_stock,
@@ -15,7 +16,6 @@ from src.sheets_sync import (
     _safe_int,
     _parse_fecha,
 )
-from datetime import datetime
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +132,7 @@ class TestParsePedidosCsv:
 class TestUpsertStock:
     def test_insert_nuevos(self, stock_csv):
         items = parse_stock_csv(stock_csv)
-        now = datetime.utcnow()
+        now = utc_now()
         ins, upd = _upsert_stock(items, now)
         assert ins == len(items)
         assert upd == 0
@@ -142,7 +142,7 @@ class TestUpsertStock:
 
     def test_update_no_duplica(self, stock_csv):
         items = parse_stock_csv(stock_csv)
-        now = datetime.utcnow()
+        now = utc_now()
         # Primer sync
         _upsert_stock(items, now)
         # Segundo sync con los mismos datos
@@ -155,7 +155,7 @@ class TestUpsertStock:
 
     def test_update_refleja_cambios(self, stock_csv):
         items = parse_stock_csv(stock_csv)
-        now = datetime.utcnow()
+        now = utc_now()
         _upsert_stock(items, now)
 
         # Simular que en el Sheets se actualizó el stock
@@ -171,7 +171,7 @@ class TestUpsertStock:
 
     def test_property_en_rojo(self, stock_csv):
         items = parse_stock_csv(stock_csv)
-        _upsert_stock(items, datetime.utcnow())
+        _upsert_stock(items, utc_now())
         with get_session() as s:
             rojos = [p for p in s.query(StockItem).all() if p.en_rojo]
             # 5 productos del fixture están en rojo
@@ -181,18 +181,18 @@ class TestUpsertStock:
 class TestReplacePedidos:
     def test_insert_inicial(self, pedidos_csv):
         items = parse_pedidos_csv(pedidos_csv)
-        count = _replace_pedidos(items, datetime.utcnow())
+        count = _replace_pedidos(items, utc_now())
         assert count == len(items)
         with get_session() as s:
             assert s.query(Pedido).count() == len(items)
 
     def test_replace_borra_anteriores(self, pedidos_csv):
         items = parse_pedidos_csv(pedidos_csv)
-        _replace_pedidos(items, datetime.utcnow())
+        _replace_pedidos(items, utc_now())
 
         # Sync de nuevo con menos pedidos
         nuevos = items[:3]
-        _replace_pedidos(nuevos, datetime.utcnow())
+        _replace_pedidos(nuevos, utc_now())
 
         with get_session() as s:
             # Solo deberían quedar los 3 últimos

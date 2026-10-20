@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from src.rate_limiter import RateLimiter
+from merchbot.security.rate_limiter import RateLimiter
 
 
 class FakeClock:

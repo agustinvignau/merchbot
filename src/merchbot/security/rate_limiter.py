@@ -19,6 +19,8 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Callable
 
+from merchbot.timeutils import utc_now
+
 
 class RateLimiter:
     """Sliding window rate limiter por clave (user_id).
@@ -32,7 +34,7 @@ class RateLimiter:
         self,
         max_attempts: int,
         window_minutes: int,
-        clock: Callable[[], datetime] = datetime.utcnow,
+        clock: Callable[[], datetime] = utc_now,
     ) -> None:
         """
         Args:

@@ -9,12 +9,12 @@ las inserta en la DB y muestra un resumen.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from src.config import settings  # noqa: E402
-from src.database import init_db, get_session  # noqa: E402
-from src.models import StockItem, Pedido  # noqa: E402
-from src.sheets_sync import sync_from_sheets  # noqa: E402
+from merchbot.config import settings  # noqa: E402
+from merchbot.data.database import init_db, get_session  # noqa: E402
+from merchbot.data.models import StockItem, Pedido  # noqa: E402
+from merchbot.data.sheets_sync import sync_from_sheets  # noqa: E402
 
 
 def main() -> int:
@@ -27,10 +27,10 @@ def main() -> int:
         return 1
 
     print(f"[1/3] SHEETS_ID: {settings.sheets_id}")
-    print(f"[2/3] Inicializando DB...")
+    print("[2/3] Inicializando DB...")
     init_db()
 
-    print(f"[3/3] Ejecutando sync...\n")
+    print("[3/3] Ejecutando sync...\n")
     result = sync_from_sheets()
     print(result.resumen())
 

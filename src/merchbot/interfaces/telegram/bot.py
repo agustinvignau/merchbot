@@ -9,7 +9,7 @@ Comandos:
     /resumen  - resumen ejecutivo
     /clear    - borra el historial de la conversación
 
-Mensajes de texto libre se procesan con Gemini (MerchBot.ask).
+Mensajes de texto libre se procesan con ChatService (Gemini + function calling).
 
 SEGURIDAD: por defecto solo responden a usuarios en TELEGRAM_ALLOWED_USER_IDS.
 """
@@ -30,29 +30,24 @@ from telegram.ext import (
     filters,
 )
 
-from src.config import settings
-from src.gemini_bot import (
-    MerchBot,
+from merchbot.config import settings
+from merchbot.core.chat_service import ChatService, get_chat_service
+from merchbot.data.sheets_sync import sync_from_sheets
+from merchbot.interfaces.telegram.formatters import (
     format_comprar_message,
     format_resumen_message,
 )
-from src.rate_limiter import RateLimiter
-from src.sheets_sync import sync_from_sheets
+from merchbot.security.rate_limiter import RateLimiter
 
 
 logger = logging.getLogger(__name__)
 
 TELEGRAM_MAX_MSG_LEN = 4000
 
-# Instancia única del bot de Gemini compartida entre handlers.
-_merch_bot: Optional[MerchBot] = None
 
-
-def get_merch_bot() -> MerchBot:
-    global _merch_bot
-    if _merch_bot is None:
-        _merch_bot = MerchBot()
-    return _merch_bot
+def _service() -> ChatService:
+    """Toda la lógica pasa por ChatService (compartido con la interfaz web)."""
+    return get_chat_service()
 
 
 # Rate limiter compartido para usuarios NO autorizados.
@@ -228,8 +223,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 @requires_auth
 async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    bot = get_merch_bot()
-    n = bot.clear_memory(update.effective_user.id)
+    n = _service().clear(update.effective_user.id)
     if n == 0:
         await update.message.reply_text("No había historial para borrar 🤷")
     else:
@@ -257,9 +251,8 @@ async def cmd_sync(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 @requires_auth
 async def cmd_comprar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Atajo directo a DB (sin Gemini): productos en rojo."""
-    bot = get_merch_bot()
     try:
-        productos = await asyncio.to_thread(bot.get_productos_a_comprar)
+        productos = await asyncio.to_thread(_service().productos_a_comprar)
         await _reply_largo(update, format_comprar_message(productos))
     except Exception as e:
         logger.exception("Error en /comprar")
@@ -271,9 +264,8 @@ async def cmd_comprar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 @requires_auth
 async def cmd_resumen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Atajo directo a DB (sin Gemini): resumen ejecutivo."""
-    bot = get_merch_bot()
     try:
-        resumen = await asyncio.to_thread(bot.get_resumen_ejecutivo)
+        resumen = await asyncio.to_thread(_service().resumen_ejecutivo)
         await _reply_largo(
             update,
             format_resumen_message(resumen),
@@ -297,14 +289,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     user_id = update.effective_user.id
-    bot = get_merch_bot()
 
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id, action=ChatAction.TYPING
     )
 
     try:
-        respuesta = await asyncio.to_thread(bot.ask, user_id, texto)
+        respuesta = await asyncio.to_thread(_service().ask, user_id, texto)
         await _reply_largo(update, respuesta)
     except Exception as e:
         logger.exception("Error procesando mensaje de user_id=%s", user_id)
@@ -380,7 +371,7 @@ def run() -> None:
         logger.info("Whitelist activa: %d usuarios autorizados", len(allowed))
 
     logger.info("Inicializando MerchBot...")
-    get_merch_bot()  # warm-up
+    _ = _service().assistant  # warm-up: falla rápido si falta la API key
 
     logger.info("Arrancando bot de Telegram (long-polling)...")
     app = build_application()

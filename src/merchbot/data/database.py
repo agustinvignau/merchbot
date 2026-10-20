@@ -4,8 +4,8 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
-from src.config import settings
-from src.models import Base
+from merchbot.config import settings
+from merchbot.data.models import Base
 
 
 def _normalize_db_url(url: str) -> str:

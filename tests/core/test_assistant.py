@@ -5,67 +5,13 @@ Cambios vs v1:
   (esas funciones ya no existen — ahora Gemini consulta vía tools, no por prompt).
 - Reescritos los tests de ask(): mockeamos el loop completo de function calling.
 
-Lo que NO cambió:
-- format_comprar_message, format_resumen_message
-- get_productos_a_comprar (atajo directo a DB)
-- get_resumen_ejecutivo (idem)
-- Memoria conversacional por usuario
+Los formateadores de Telegram y los reportes sin IA tienen sus propios tests
+(tests/interfaces/test_telegram_formatters.py y tests/core/test_reports.py).
+Las fixtures de datos (db_with_data) viven en tests/conftest.py.
 """
-from datetime import date
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from src.gemini_bot import (
-    MerchBot,
-    Turno,
-    format_comprar_message,
-    format_resumen_message,
-)
-from src.models import StockItem, Pedido
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def sample_stock():
-    return [
-        StockItem(sku="REM-CR-BCO-M", producto="Remera", modelo="Cuello Redondo",
-                  color="Blanco", talle="M", stock_inicial=100, ingresos=100,
-                  pedidos=180, stock_actual=20, estado="OK"),
-        StockItem(sku="REM-DF-NEG-M", producto="Remera", modelo="Dry-Fit",
-                  color="Negro", talle="M", stock_inicial=30, ingresos=0,
-                  pedidos=45, stock_actual=-15, estado="COMPRAR"),
-        StockItem(sku="BUZ-CN-NEG-L", producto="Buzo", modelo="Canguro",
-                  color="Negro", talle="L", stock_inicial=45, ingresos=30,
-                  pedidos=50, stock_actual=25, estado="OK"),
-        StockItem(sku="GOR-RES-ROJ", producto="Gorra", modelo="Con Respiración",
-                  color="Rojo", talle="Único", stock_inicial=20, ingresos=0,
-                  pedidos=40, stock_actual=-20, estado="COMPRAR"),
-    ]
-
-
-@pytest.fixture
-def sample_pedidos():
-    return [
-        Pedido(fecha=date(2026, 5, 14), cliente="Globant - Welcome Kit",
-               sku="BUZ-CN-NEG-L", producto="Buzo Canguro Negro L", cantidad=50),
-        Pedido(fecha=date(2026, 4, 15), cliente="Coca-Cola - Evento",
-               sku="REM-CR-BCO-M", producto="Remera CR Blanco M", cantidad=120),
-        Pedido(fecha=date(2026, 4, 28), cliente="Movistar - Día del Padre",
-               sku="REM-DF-NEG-M", producto="Remera Dry-Fit Negro M", cantidad=45),
-    ]
-
-
-@pytest.fixture
-def db_with_data(test_session_factory, sample_stock, sample_pedidos):
-    session = test_session_factory()
-    session.add_all(sample_stock + sample_pedidos)
-    session.commit()
-    session.close()
-    return sample_stock, sample_pedidos
+from merchbot.core.assistant import MerchBot, Turno
 
 
 # ---------------------------------------------------------------------------
@@ -106,93 +52,11 @@ def _bot_con_responses(responses: list[MagicMock]):
 
     Cada llamada a generate_content devuelve el siguiente response de la lista.
     """
-    with patch("src.gemini_bot.genai.Client") as MockClient:
+    with patch("merchbot.core.assistant.genai.Client") as MockClient:
         client = MockClient.return_value
         client.models.generate_content.side_effect = responses
         bot = MerchBot(api_key="fake")
         return bot, client
-
-
-# ---------------------------------------------------------------------------
-# Formateadores (no cambiaron entre v1 y v2)
-# ---------------------------------------------------------------------------
-
-class TestFormatComprar:
-    def test_lista_vacia(self):
-        assert "Stock OK" in format_comprar_message([])
-
-    def test_con_productos(self):
-        productos = [
-            {"sku": "X-1", "descripcion": "Remera Dry-Fit Negro M",
-             "stock_actual": -15, "estado": "COMPRAR"},
-            {"sku": "X-2", "descripcion": "Gorra Roja",
-             "stock_actual": -20, "estado": "COMPRAR"},
-        ]
-        msg = format_comprar_message(productos)
-        assert "2 producto(s)" in msg
-        assert "Remera Dry-Fit Negro M" in msg
-        assert "faltan 15" in msg
-        assert "faltan 20" in msg
-
-
-class TestFormatResumen:
-    def test_estructura_basica(self):
-        r = {
-            "total_skus": 37, "skus_ok": 32, "skus_comprar": 5,
-            "unidades_totales": 1500, "total_pedidos": 21,
-            "unidades_vendidas": 1400, "clientes_distintos": 12,
-            "top_cliente": ("Coca-Cola", 240),
-            "top_producto": ("Remera Cuello Redondo Blanco M", 180),
-        }
-        msg = format_resumen_message(r)
-        assert "37" in msg
-        assert "Coca-Cola" in msg
-        assert "1.500" in msg  # separador de miles
-
-
-# ---------------------------------------------------------------------------
-# Atajos directos a DB (no usan IA — no cambiaron entre v1 y v2)
-# ---------------------------------------------------------------------------
-
-class TestGetProductosAComprar:
-    def test_devuelve_solo_estado_comprar(self, db_with_data):
-        bot = MerchBot.__new__(MerchBot)
-        productos = bot.get_productos_a_comprar()
-        skus = {p["sku"] for p in productos}
-        assert skus == {"REM-DF-NEG-M", "GOR-RES-ROJ"}
-
-    def test_devuelve_dicts_no_orm(self, db_with_data):
-        """Crítico: si devuelve ORM, fuera de sesión truena DetachedInstance."""
-        bot = MerchBot.__new__(MerchBot)
-        productos = bot.get_productos_a_comprar()
-        for p in productos:
-            assert isinstance(p, dict)
-            assert p["descripcion"]
-
-    def test_orden_por_urgencia(self, db_with_data):
-        bot = MerchBot.__new__(MerchBot)
-        productos = bot.get_productos_a_comprar()
-        assert productos[0]["sku"] == "GOR-RES-ROJ"
-        assert productos[1]["sku"] == "REM-DF-NEG-M"
-
-
-class TestGetResumenEjecutivo:
-    def test_metricas_basicas(self, db_with_data):
-        bot = MerchBot.__new__(MerchBot)
-        r = bot.get_resumen_ejecutivo()
-        assert r["total_skus"] == 4
-        assert r["skus_comprar"] == 2
-        assert r["skus_ok"] == 2
-        # Suma de stocks positivos: 20 + 25 = 45
-        assert r["unidades_totales"] == 45
-
-    def test_pedidos_agregados(self, db_with_data):
-        bot = MerchBot.__new__(MerchBot)
-        r = bot.get_resumen_ejecutivo()
-        assert r["total_pedidos"] == 3
-        # 50 + 120 + 45 = 215
-        assert r["unidades_vendidas"] == 215
-        assert r["clientes_distintos"] == 3
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +65,7 @@ class TestGetResumenEjecutivo:
 
 class TestMemoria:
     def _bot_sin_red(self):
-        with patch("src.gemini_bot.genai.Client"):
+        with patch("merchbot.core.assistant.genai.Client"):
             return MerchBot(api_key="fake")
 
     def test_clear_memory_devuelve_cantidad(self):

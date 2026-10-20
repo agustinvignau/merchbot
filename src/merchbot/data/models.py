@@ -9,7 +9,7 @@ Decisión: NO normalizamos en ProductoBase + Variante porque:
 - El bot busca por combinación de atributos, no por jerarquía.
 - Si en el futuro hace falta normalizar (para reportes), migramos.
 """
-from datetime import datetime
+from merchbot.timeutils import utc_now
 
 from sqlalchemy import Column, Integer, String, DateTime, Date, Index
 from sqlalchemy.orm import declarative_base
@@ -40,7 +40,7 @@ class StockItem(Base):
     estado = Column(String(16), nullable=False, default="OK")    # "OK" o "COMPRAR"
 
     # Metadata
-    last_synced_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    last_synced_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     # Índices compuestos útiles para búsquedas frecuentes
     __table_args__ = (
@@ -93,7 +93,7 @@ class Pedido(Base):
     producto = Column(String(160), nullable=False)   # descripción denormalizada
     cantidad = Column(Integer, nullable=False)
 
-    last_synced_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    last_synced_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Pedido {self.fecha} {self.cliente} {self.sku} x{self.cantidad}>"
