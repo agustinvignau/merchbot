@@ -295,6 +295,7 @@
       cifra("Tiempo de respuesta", ms(t.duracion_mediana_ms), `mediana; el 95 % en menos de ${ms(t.duracion_p95_ms)}`),
       cifra("Con error", `${t.porcentaje_errores.toLocaleString("es-AR")} %`, `${miles(t.errores)} consulta(s)`),
       cifra("Reclamos abiertos", miles(t.reclamos_abiertos), `${miles(m.reclamos.por_estado.en_revision)} en revisión`),
+      cifra("Por voz", `${t.porcentaje_por_voz.toLocaleString("es-AR")} %`, `${miles(t.por_voz)} consulta(s) dictada(s)`),
     ].join("");
   }
 
@@ -402,7 +403,7 @@
       interacciones.map((i) => `<tr>
         <td class="fecha">${escapar(fecha(i.created_at))}</td>
         <td>${escapar(i.hora_simulada)}${i.fuera_de_horario ? '<br><span class="luna">fuera de horario</span>' : ""}</td>
-        <td>${escapar(i.canal)}</td>
+        <td>${escapar(i.canal)}${i.origen === "voz" ? "<br><small>por voz</small>" : ""}</td>
         <td>${escapar(NOMBRES_TIPO[i.tipo] || i.tipo)}</td>
         <td><span class="recorte" title="${escapar(i.consulta)}">${escapar(i.consulta)}</span></td>
         <td><span class="recorte" title="${escapar(i.respuesta)}">${escapar(i.respuesta || "—")}</span></td>

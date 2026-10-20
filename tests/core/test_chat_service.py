@@ -195,3 +195,21 @@ def test_created_at_lleva_zona_horaria(assistant):
     r = ChatService(assistant=assistant).registrar_reclamo("s1", "Faltan 5 gorras")
     assert r["created_at"].endswith("+00:00")
 
+
+
+class TestVoz:
+    def test_lo_dictado_se_normaliza_antes_del_modelo(self, assistant):
+        a = ChatService(assistant=assistant).atender(1, "doscientos buzos talle ele", origen="voz")
+        assert assistant.responder.call_args.args[1] == "200 buzos talle L"
+        assert a.consulta == "200 buzos talle L"
+        assert listar_interacciones()[0]["origen"] == "voz"
+        assert listar_interacciones()[0]["consulta"] == "200 buzos talle L"
+
+    def test_lo_escrito_no_se_toca(self, assistant):
+        ChatService(assistant=assistant).atender(1, "doscientos buzos talle ele")
+        assert assistant.responder.call_args.args[1] == "doscientos buzos talle ele"
+        assert listar_interacciones()[0]["origen"] == "texto"
+
+    def test_origen_invalido(self, assistant):
+        with pytest.raises(ValueError):
+            ChatService(assistant=assistant).atender(1, "hola", origen="telepatia")

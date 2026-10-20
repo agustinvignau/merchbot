@@ -27,7 +27,7 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
@@ -60,6 +60,7 @@ HoraSimulada = Optional[str]
 class ChatRequest(BaseModel):
     message: str = Field(..., max_length=MAX_MESSAGE_LEN)
     hora: HoraSimulada = Field(None, description="Hora simulada HH:MM; vacío = hora real")
+    origen: Literal["texto", "voz"] = Field("texto", description="'voz' si el mensaje se dictó")
 
 
 class ChatReply(BaseModel):
@@ -67,6 +68,7 @@ class ChatReply(BaseModel):
     hora: str
     fuera_de_horario: bool
     tipo: str
+    consulta: str = Field(..., description="La consulta como la procesó el asistente (normalizada si fue dictada)")
 
 
 class Turno(BaseModel):
@@ -163,8 +165,9 @@ def create_app(
     ) -> ChatReply:
         hora = _hora(body.hora)
         try:
-            a = svc.atender(sid, body.message, canal="web", hora_simulada=hora)
-            return ChatReply(reply=a.texto, hora=a.hora, fuera_de_horario=a.fuera_de_horario, tipo=a.tipo)
+            a = svc.atender(sid, body.message, canal="web", hora_simulada=hora, origen=body.origen)
+            return ChatReply(reply=a.texto, hora=a.hora, fuera_de_horario=a.fuera_de_horario,
+                             tipo=a.tipo, consulta=a.consulta)
         except Exception:
             logger.exception("Error procesando mensaje de %s", sid)
             raise HTTPException(

@@ -49,6 +49,10 @@ def calcular_metricas(dias: Optional[int] = 7, canal: Optional[str] = None) -> d
         por_tipo = contar_por(Interaccion.tipo)
         por_canal = contar_por(Interaccion.canal)
         por_estado = contar_por(Interaccion.estado)
+        por_origen = {"texto": 0, "voz": 0}
+        for origen, n in contar_por(Interaccion.origen).items():
+            clave = "voz" if origen == "voz" else "texto"   # NULL (registros viejos) = texto
+            por_origen[clave] += n
 
         filas = base.with_entities(
             Interaccion.hora_simulada, Interaccion.fuera_de_horario,
@@ -90,7 +94,10 @@ def calcular_metricas(dias: Optional[int] = 7, canal: Optional[str] = None) -> d
             "duracion_mediana_ms": _percentil(duraciones, 50),
             "duracion_p95_ms": _percentil(duraciones, 95),
             "reclamos_abiertos": reclamos_por_estado.get("abierto", 0),
+            "por_voz": por_origen["voz"],
+            "porcentaje_por_voz": round(100 * por_origen["voz"] / total, 1) if total else 0.0,
         },
+        "por_origen": por_origen,
         "por_hora": por_hora,
         "por_tipo": dict(sorted(por_tipo.items(), key=lambda kv: -kv[1])),
         "por_canal": dict(sorted(por_canal.items(), key=lambda kv: -kv[1])),
