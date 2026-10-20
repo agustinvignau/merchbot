@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MerchBot</title>
+<meta name="description" content="Consultá el stock y los pedidos de la empresa en lenguaje natural.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Familjen+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --papel: #F2F4F6;
+    --superficie: #FFFFFF;
+    --tinta: #18212E;
+    --tinta-suave: #4A5568;
+    --linea: #D6DCE3;
+    --magenta: #C8175D;
+    --magenta-hover: #A3124B;
+    --cian: #0E7490;
+    --cian-fondo: #E3F1F5;
+    --amarillo: #F2C230;
+    --amarillo-fondo: #FDF4D6;
+    --foco: #0E7490;
+    --radio-chico: 6px;
+    --ancho: 760px;
+    --display: "Familjen Grotesk", "Segoe UI", system-ui, sans-serif;
+    --texto: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: var(--texto);
+    font-size: 1rem;
+    line-height: 1.55;
+    display: flex;
+    flex-direction: column;
+  }
+
+  :focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---------- Encabezado ---------- */
+  .barra {
+    border-bottom: 1px solid var(--linea);
+    background: var(--superficie);
+  }
+  .barra-interior {
+    max-width: var(--ancho);
+    margin: 0 auto;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .marca {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.01em;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .marca-punto {
+    width: 0.7rem; height: 0.7rem; border-radius: 50%;
+    background: conic-gradient(var(--cian) 0 33%, var(--magenta) 0 66%, var(--amarillo) 0);
+  }
+  .estado {
+    color: var(--tinta-suave);
+    font-size: 0.875rem;
+    margin-right: auto;
+  }
+  .boton-texto {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radio-chico);
+    color: var(--tinta);
+    padding: 0.35rem 0.6rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+  }
+  .boton-texto:hover { border-color: var(--linea); background: var(--papel); }
+
+  /* ---------- Conversación ---------- */
+  main {
+    flex: 1;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+  }
+  .conversacion {
+    max-width: var(--ancho);
+    margin: 0 auto;
+    padding: 1.5rem 1rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .bienvenida h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(1.6rem, 4vw, 2.1rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin: 1.5rem 0 0.5rem;
+    max-width: 20ch;
+  }
+  .bienvenida p { color: var(--tinta-suave); margin: 0 0 1.5rem; max-width: 56ch; }
+
+  /* Etiquetas colgantes: el gesto propio de la interfaz */
+  .etiquetas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem 0.75rem;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+  .etiqueta {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    background: var(--superficie);
+    color: var(--tinta);
+    border: 1px solid var(--linea);
+    border-left: 4px solid var(--color-etiqueta, var(--cian));
+    border-radius: 3px 10px 10px 3px;
+    padding: 0.55rem 0.9rem 0.55rem 0.75rem;
+    text-align: left;
+    font-size: 0.95rem;
+    transform-origin: 0.6rem 50%;
+    transition: transform 160ms ease, box-shadow 160ms ease;
+  }
+  .etiqueta::before {          /* ojal de la etiqueta */
+    content: "";
+    width: 0.5rem; height: 0.5rem;
+    border-radius: 50%;
+    border: 2px solid var(--linea);
+    background: var(--papel);
+    flex: none;
+  }
+  .etiqueta:hover { transform: rotate(-2deg); box-shadow: 0 6px 14px -8px rgba(24, 33, 46, 0.45); }
+  .etiqueta:active { transform: rotate(0); }
+  .etiqueta[data-tipo="atajo"] { --color-etiqueta: var(--magenta); font-weight: 700; }
+  .etiqueta[disabled] { opacity: 0.5; cursor: progress; transform: none; }
+
+  .mensaje { max-width: 100%; }
+  .mensaje-usuario {
+    align-self: flex-end;
+    background: var(--tinta);
+    color: #fff;
+    padding: 0.6rem 0.9rem;
+    border-radius: 14px 14px 3px 14px;
+    max-width: min(85%, 34rem);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .mensaje-bot {
+    align-self: flex-start;
+    border-left: 3px solid var(--cian);
+    padding: 0.1rem 0 0.1rem 0.9rem;
+    max-width: 62ch;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .mensaje-error {
+    align-self: flex-start;
+    border-left: 3px solid var(--magenta);
+    padding: 0.4rem 0.9rem;
+    background: #FBE9F0;
+    border-radius: 0 var(--radio-chico) var(--radio-chico) 0;
+  }
+  .mensaje-error button {
+    margin-left: 0.5rem;
+    background: none; border: none; padding: 0;
+    color: var(--magenta-hover); text-decoration: underline; font-weight: 700;
+  }
+
+  /* Bloques de datos (atajos sin IA) */
+  .datos { white-space: normal; }
+  .datos h3 {
+    font-family: var(--display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+  }
+  .tabla { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  .tabla th { text-align: left; font-weight: 700; color: var(--tinta-suave); padding: 0.3rem 0.75rem 0.3rem 0; border-bottom: 1px solid var(--linea); }
+  .tabla td { padding: 0.35rem 0.75rem 0.35rem 0; border-bottom: 1px solid var(--linea); vertical-align: top; }
+  .tabla td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .falta { background: var(--amarillo-fondo); border-radius: 4px; padding: 0 0.35rem; font-weight: 700; }
+  .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; margin: 0; }
+  .cifras div { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio-chico); padding: 0.6rem 0.75rem; }
+  .cifras dt { font-size: 0.85rem; color: var(--tinta-suave); }
+  .cifras dd { margin: 0; font-family: var(--display); font-size: 1.4rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .nota { color: var(--tinta-suave); font-size: 0.9rem; margin: 0.6rem 0 0; }
+
+  .escribiendo { align-self: flex-start; display: flex; gap: 0.3rem; padding: 0.6rem 0 0.6rem 0.9rem; border-left: 3px solid var(--cian); }
+  .escribiendo span { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--cian); animation: pulso 1s infinite ease-in-out; }
+  .escribiendo span:nth-child(2) { animation-delay: 0.15s; background: var(--magenta); }
+  .escribiendo span:nth-child(3) { animation-delay: 0.3s; background: var(--amarillo); }
+  @keyframes pulso { 0%, 100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+
+  /* ---------- Redactor ---------- */
+  .redactor { border-top: 1px solid var(--linea); background: var(--superficie); }
+  .redactor form {
+    max-width: var(--ancho);
+    margin: 0 auto;
+    padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-end;
+  }
+  .redactor textarea {
+    flex: 1;
+    resize: none;
+    min-height: 2.9rem;
+    max-height: 9rem;
+    padding: 0.7rem 0.85rem;
+    font: inherit;
+    color: var(--tinta);
+    background: var(--papel);
+    border: 1px solid var(--linea);
+    border-radius: 10px;
+  }
+  .redactor textarea::placeholder { color: #6B7686; }
+  .boton-enviar {
+    background: var(--magenta);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 0 1.15rem;
+    height: 2.9rem;
+    font-weight: 700;
+  }
+  .boton-enviar:hover { background: var(--magenta-hover); }
+  .boton-enviar:disabled { background: #B9C1CC; cursor: not-allowed; }
+  .ayuda { max-width: var(--ancho); margin: -0.35rem auto 0; padding: 0 1rem 0.6rem; font-size: 0.8rem; color: var(--tinta-suave); }
+
+  .visualmente-oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 560px) {
+    .estado, .largo { display: none; }
+    .marca { margin-right: auto; }
+    .etiqueta { font-size: 0.9rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+  <header class="barra">
+    <div class="barra-interior">
+      <h1 class="marca"><span class="marca-punto" aria-hidden="true"></span>MerchBot</h1>
+      <span class="estado" id="estado">Conectando…</span>
+      <button class="boton-texto" id="btn-actualizar" type="button" title="Volver a cargar el stock y los pedidos">Actualizar<span class="largo"> datos</span></button>
+      <button class="boton-texto" id="btn-nueva" type="button" aria-label="Nueva conversación">Nueva<span class="largo"> conversación</span></button>
+    </div>
+  </header>
+
+  <main id="scroll">
+    <div class="conversacion" id="conversacion" aria-live="polite">
+      <section class="bienvenida" id="bienvenida">
+        <h2>¿Qué querés saber del stock?</h2>
+        <p>Preguntá como le preguntarías al encargado del depósito: por un producto, un color, un talle o un cliente. Las cantidades salen de la base de datos, no las inventa el asistente.</p>
+        <ul class="etiquetas" aria-label="Consultas rápidas">
+          <li><button class="etiqueta" data-tipo="atajo" data-accion="comprar" type="button">Qué hay que comprar</button></li>
+          <li><button class="etiqueta" data-tipo="atajo" data-accion="resumen" type="button">Resumen del inventario</button></li>
+          <li><button class="etiqueta" data-pregunta="¿Cuántas remeras negras talle M tengo?" type="button">Remeras negras talle M</button></li>
+          <li><button class="etiqueta" data-pregunta="¿Qué pidió Coca-Cola?" type="button">Pedidos de Coca-Cola</button></li>
+          <li><button class="etiqueta" data-pregunta="Necesito 200 buzos canguro grises L para un evento, ¿me alcanza?" type="button">¿Alcanzan 200 buzos grises L?</button></li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <footer class="redactor">
+    <form id="form" autocomplete="off">
+      <label class="visualmente-oculto" for="entrada">Tu consulta</label>
+      <textarea id="entrada" rows="1" maxlength="2000" placeholder="Ej.: ¿quedan gorras rojas?"></textarea>
+      <button class="boton-enviar" id="btn-enviar" type="submit">Enviar</button>
+    </form>
+    <p class="ayuda">Enter para enviar, Shift + Enter para una línea nueva.</p>
+  </footer>
+
+<script>
+(() => {
+  const $ = (sel) => document.querySelector(sel);
+  const conversacion = $("#conversacion");
+  const scroll = $("#scroll");
+  const bienvenida = $("#bienvenida");
+  const form = $("#form");
+  const entrada = $("#entrada");
+  const btnEnviar = $("#btn-enviar");
+  const estado = $("#estado");
+  let ocupado = false;
+
+  // ---------- utilidades ----------
+  const escapar = (t) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // Formato mínimo y seguro: el texto se escapa primero y después se marcan las negritas.
+  const formatear = (t) => escapar(t)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[\s(])\*(?!\s)(.+?)\*(?=[\s.,;:!?)]|$)/gm, "$1<strong>$2</strong>");
+  const miles = (n) => Number(n).toLocaleString("es-AR");
+
+  function alFinal() { scroll.scrollTop = scroll.scrollHeight; }
+
+  function agregar(html, clase) {
+    bienvenida.hidden = true;
+    const div = document.createElement("div");
+    div.className = `mensaje ${clase}`;
+    div.innerHTML = html;
+    conversacion.appendChild(div);
+    alFinal();
+    return div;
+  }
+  const agregarUsuario = (t) => agregar(escapar(t), "mensaje-usuario");
+  const agregarBot = (t) => agregar(formatear(t), "mensaje-bot");
+
+  function agregarError(texto, reintentar) {
+    const div = agregar(escapar(texto), "mensaje-error");
+    if (reintentar) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "Reintentar";
+      b.addEventListener("click", () => { div.remove(); reintentar(); });
+      div.appendChild(b);
+    }
+  }
+
+  function mostrarEscribiendo() {
+    const div = document.createElement("div");
+    div.className = "escribiendo";
+    div.setAttribute("role", "status");
+    div.innerHTML = '<span></span><span></span><span></span><span class="visualmente-oculto">El asistente está respondiendo</span>';
+    conversacion.appendChild(div);
+    alFinal();
+    return div;
+  }
+
+  function setOcupado(v) {
+    ocupado = v;
+    btnEnviar.disabled = v;
+    document.querySelectorAll(".etiqueta").forEach((b) => (b.disabled = v));
+  }
+
+  async function api(ruta, opciones = {}) {
+    const r = await fetch(ruta, { headers: { "Content-Type": "application/json" }, credentials: "same-origin", ...opciones });
+    const datos = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const detalle = typeof datos.detail === "string" ? datos.detail : "El servidor respondió con un error.";
+      throw new Error(detalle);
+    }
+    return datos;
+  }
+
+  // ---------- conversación ----------
+  async function enviar(texto) {
+    texto = texto.trim();
+    if (!texto || ocupado) return;
+    agregarUsuario(texto);
+    setOcupado(true);
+    const indicador = mostrarEscribiendo();
+    try {
+      const { reply } = await api("/api/chat", { method: "POST", body: JSON.stringify({ message: texto }) });
+      indicador.remove();
+      agregarBot(reply);
+    } catch (e) {
+      indicador.remove();
+      agregarError(e.message, () => { conversacion.lastElementChild?.classList.contains("mensaje-usuario") && conversacion.lastElementChild.remove(); enviar(texto); });
+    } finally {
+      setOcupado(false);
+      entrada.focus();
+    }
+  }
+
+  // ---------- atajos sin IA ----------
+  async function atajoComprar() {
+    agregarUsuario("Qué hay que comprar");
+    setOcupado(true);
+    try {
+      const { productos } = await api("/api/comprar");
+      if (!productos.length) { agregarBot("No hay nada para comprar: todos los productos tienen stock."); return; }
+      const total = productos.reduce((s, p) => s + Math.max(0, -p.stock_actual), 0);
+      const filas = productos.map((p) => `
+        <tr><td>${escapar(p.descripcion)}<br><small>${escapar(p.sku)}</small></td>
+        <td class="num">${miles(p.stock_actual)}</td>
+        <td class="num">${p.stock_actual < 0 ? `<span class="falta">${miles(-p.stock_actual)}</span>` : "—"}</td></tr>`).join("");
+      agregar(`<div class="datos"><h3>${productos.length} producto(s) para reponer</h3>
+        <table class="tabla"><thead><tr><th>Producto</th><th class="num">Stock</th><th class="num">Faltan</th></tr></thead><tbody>${filas}</tbody></table>
+        ${total ? `<p class="nota">Total a comprar para cubrir lo pedido: <strong>${miles(total)} unidades</strong>.</p>` : ""}</div>`, "mensaje-bot");
+    } catch (e) {
+      agregarError(e.message, atajoComprar);
+    } finally { setOcupado(false); }
+  }
+
+  async function atajoResumen() {
+    agregarUsuario("Resumen del inventario");
+    setOcupado(true);
+    try {
+      const r = await api("/api/resumen");
+      const cifra = (t, v) => `<div><dt>${t}</dt><dd>${miles(v)}</dd></div>`;
+      agregar(`<div class="datos"><h3>Resumen del inventario</h3>
+        <dl class="cifras">
+          ${cifra("Productos (SKU)", r.total_skus)}
+          ${cifra("Con stock", r.skus_ok)}
+          ${cifra("Para comprar", r.skus_comprar)}
+          ${cifra("Unidades en stock", r.unidades_totales)}
+          ${cifra("Pedidos cargados", r.total_pedidos)}
+          ${cifra("Clientes", r.clientes_distintos)}
+        </dl>
+        ${r.top_cliente ? `<p class="nota">Cliente con más unidades: <strong>${escapar(r.top_cliente.nombre)}</strong> (${miles(r.top_cliente.unidades)}).</p>` : ""}
+        ${r.top_producto ? `<p class="nota">Producto más pedido: <strong>${escapar(r.top_producto.nombre)}</strong> (${miles(r.top_producto.unidades)}).</p>` : ""}
+        </div>`, "mensaje-bot");
+    } catch (e) {
+      agregarError(e.message, atajoResumen);
+    } finally { setOcupado(false); }
+  }
+
+  // ---------- eventos ----------
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const t = entrada.value;
+    entrada.value = "";
+    ajustarAltura();
+    enviar(t);
+  });
+  entrada.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); form.requestSubmit(); }
+  });
+  function ajustarAltura() { entrada.style.height = "auto"; entrada.style.height = Math.min(entrada.scrollHeight, 144) + "px"; }
+  entrada.addEventListener("input", ajustarAltura);
+
+  document.querySelectorAll(".etiqueta").forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.accion === "comprar") return atajoComprar();
+    if (b.dataset.accion === "resumen") return atajoResumen();
+    enviar(b.dataset.pregunta);
+  }));
+
+  $("#btn-nueva").addEventListener("click", async () => {
+    if (ocupado) return;
+    try { await api("/api/historial", { method: "DELETE" }); } catch (_) { /* si falla, igual limpiamos la vista */ }
+    conversacion.querySelectorAll(".mensaje, .escribiendo").forEach((n) => n.remove());
+    bienvenida.hidden = false;
+    entrada.focus();
+  });
+
+  $("#btn-actualizar").addEventListener("click", async (ev) => {
+    const b = ev.currentTarget;
+    b.disabled = true;
+    const original = b.innerHTML;
+    b.textContent = "Actualizando…";
+    try {
+      const r = await api("/api/sync", { method: "POST" });
+      estado.textContent = `${r.fuente === "demo" ? "Datos de demo" : "Google Sheets"}: ${miles(r.productos)} productos, ${miles(r.pedidos)} pedidos`;
+    } catch (e) {
+      agregarError(`No pude actualizar los datos. ${e.message}`);
+    } finally { b.disabled = false; b.innerHTML = original; }
+  });
+
+  // ---------- arranque ----------
+  (async () => {
+    try {
+      const h = await api("/health");
+      estado.textContent = h.fuente_de_datos === "demo" ? "Datos de demo" : "Conectado a Google Sheets";
+    } catch (_) {
+      estado.textContent = "Sin conexión con el servidor";
+    }
+    try {
+      const { mensajes } = await api("/api/historial");
+      mensajes.forEach((m) => (m.role === "user" ? agregarUsuario(m.text) : agregarBot(m.text)));
+    } catch (_) { /* sin historial: queda la bienvenida */ }
+    entrada.focus();
+  })();
+})();
+</script>
+</body>
+</html>
