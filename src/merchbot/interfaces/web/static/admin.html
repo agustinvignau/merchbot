@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de MerchBot</title>
+<meta name="description" content="Métricas de uso del asistente, reclamos e interacciones registradas.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Familjen+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --papel: #F2F4F6;
+    --superficie: #FFFFFF;
+    --tinta: #18212E;
+    --tinta-suave: #4A5568;
+    --tinta-tenue: #6B7686;
+    --linea: #D6DCE3;
+    --grilla: #E6EAEF;
+    --magenta: #C8175D;
+    --magenta-hover: #A3124B;
+    --magenta-fondo: #FBE9F0;
+    --cian: #0E7490;
+    --cian-fondo: #E3F1F5;
+    --amarillo: #F2C230;
+    --amarillo-fondo: #FDF4D6;
+    --noche: #1E2A3D;
+    --verde: #1F7A4D;
+    --verde-fondo: #E4F3EA;
+    --foco: #0E7490;
+    --radio: 8px;
+    --ancho: 1120px;
+    --display: "Familjen Grotesk", "Segoe UI", system-ui, sans-serif;
+    --texto: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--papel); color: var(--tinta); font-family: var(--texto); line-height: 1.5; }
+  :focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+  button, select, input { font: inherit; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
+
+  .barra { background: var(--superficie); border-bottom: 1px solid var(--linea); }
+  .barra-interior { max-width: var(--ancho); margin: 0 auto; padding: 0.65rem 1rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  .marca { font-family: var(--display); font-weight: 700; font-size: 1.2rem; margin: 0; display: flex; align-items: center; gap: 0.5rem; }
+  .marca a { color: inherit; text-decoration: none; }
+  .marca-punto { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: conic-gradient(var(--cian) 0 33%, var(--magenta) 0 66%, var(--amarillo) 0); }
+  .marca small { font-family: var(--texto); font-weight: 400; font-size: 0.95rem; color: var(--tinta-suave); }
+  .filtros { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+  .filtros label { font-size: 0.85rem; color: var(--tinta-suave); display: flex; align-items: center; gap: 0.35rem; }
+  select, input[type="password"] { border: 1px solid var(--linea); border-radius: var(--radio); background: var(--superficie); color: var(--tinta); padding: 0.35rem 0.55rem; }
+  .boton-texto { background: none; border: 1px solid var(--linea); border-radius: var(--radio); color: var(--tinta); padding: 0.35rem 0.7rem; font-size: 0.9rem; }
+  .boton-texto:hover { background: var(--papel); }
+  .boton { background: var(--magenta); color: #fff; border: none; border-radius: var(--radio); padding: 0.55rem 1.1rem; font-weight: 700; }
+  .boton:hover { background: var(--magenta-hover); }
+
+  main { max-width: var(--ancho); margin: 0 auto; padding: 1.25rem 1rem 3rem; display: flex; flex-direction: column; gap: 1.25rem; }
+  .actualizado { font-size: 0.85rem; color: var(--tinta-suave); margin: 0; }
+
+  /* Ingreso */
+  .ingreso { max-width: 24rem; margin: 4rem max(1rem, calc((100% - 24rem) / 2)); background: var(--superficie); border: 1px solid var(--linea); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.9rem; }
+  .ingreso h2 { font-family: var(--display); font-weight: 600; margin: 0; font-size: 1.4rem; }
+  .ingreso p { margin: 0; color: var(--tinta-suave); }
+  .ingreso input { width: 100%; padding: 0.6rem 0.75rem; }
+  .error { color: var(--magenta-hover); margin: 0; font-size: 0.92rem; }
+
+  /* Cifras */
+  .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: 0.75rem; margin: 0; }
+  .cifra { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 0.8rem 0.95rem; }
+  .cifra dt { font-size: 0.88rem; color: var(--tinta-suave); }
+  .cifra dd { margin: 0; }
+  .cifra .valor { font-family: var(--display); font-size: 2rem; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; display: block; }
+  .cifra .detalle { font-size: 0.82rem; color: var(--tinta-suave); display: block; }
+  .cifra.destacada { background: var(--noche); border-color: var(--noche); color: #fff; }
+  .cifra.destacada dt, .cifra.destacada .detalle { color: #C9D2DE; }
+
+  /* Tarjetas */
+  .tarjeta { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio); padding: 1rem 1.1rem 1.1rem; min-width: 0; }
+  .tarjeta h2 { font-family: var(--display); font-weight: 600; font-size: 1.1rem; margin: 0 0 0.2rem; }
+  .tarjeta .sub { margin: 0 0 0.9rem; font-size: 0.88rem; color: var(--tinta-suave); }
+  .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  .vacio { color: var(--tinta-suave); font-size: 0.92rem; margin: 0.5rem 0; }
+
+  /* Columnas por hora */
+  .grafico-horas { position: relative; overflow-x: auto; padding-top: 2.4rem; margin-top: -1.6rem; }
+  .grafico-horas svg { display: block; width: 100%; min-width: 620px; height: auto; overflow: visible; }
+  .eje { fill: var(--tinta-tenue); font-size: 11px; font-family: var(--texto); }
+  .tooltip { position: absolute; pointer-events: none; background: var(--tinta); color: #fff; font-size: 0.82rem; padding: 0.3rem 0.55rem; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -110%); }
+  .leyenda { display: flex; gap: 1rem; font-size: 0.82rem; color: var(--tinta-suave); margin-top: 0.4rem; flex-wrap: wrap; }
+  .leyenda span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .muestra { width: 0.8rem; height: 0.8rem; border-radius: 2px; display: inline-block; }
+
+  /* Barras horizontales */
+  .barras { display: flex; flex-direction: column; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
+  .barras li { display: grid; grid-template-columns: minmax(7rem, 11rem) 1fr 2.5rem; align-items: center; gap: 0.6rem; font-size: 0.92rem; }
+  .barras .pista { height: 14px; }
+  .barras .relleno { height: 14px; background: var(--cian); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .barras .numero { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .barras .nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  details { margin-top: 0.6rem; font-size: 0.88rem; }
+  summary { color: var(--tinta-suave); cursor: pointer; }
+
+  /* Tablas */
+  .tabla-envoltorio { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th { text-align: left; color: var(--tinta-suave); font-weight: 700; padding: 0.4rem 0.6rem 0.4rem 0; border-bottom: 1px solid var(--linea); white-space: nowrap; }
+  td { padding: 0.5rem 0.6rem 0.5rem 0; border-bottom: 1px solid var(--grilla); vertical-align: top; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.fecha { white-space: nowrap; }
+  .recorte { max-width: 26rem; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .marca-estado { display: inline-block; border-radius: 999px; padding: 0 0.55rem; font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
+  .estado-abierto { background: var(--amarillo-fondo); color: #6B4E00; }
+  .estado-en_revision { background: var(--cian-fondo); color: #0A5568; }
+  .estado-resuelto { background: var(--verde-fondo); color: var(--verde); }
+  .estado-ok { background: var(--verde-fondo); color: var(--verde); }
+  .estado-error { background: var(--magenta-fondo); color: var(--magenta-hover); }
+  .luna { font-weight: 700; color: var(--noche); }
+  .filtros-tabla { display: flex; gap: 0.9rem; flex-wrap: wrap; align-items: center; margin: 0 0 0.7rem; font-size: 0.88rem; }
+  .filtros-tabla label { display: flex; align-items: center; gap: 0.35rem; color: var(--tinta-suave); }
+
+  .visualmente-oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 760px) {
+    .dos { grid-template-columns: 1fr; }
+    .filtros { margin-left: 0; width: 100%; }
+    .barras li { grid-template-columns: 7rem 1fr 2.2rem; }
+  }
+</style>
+</head>
+<body>
+  <header class="barra">
+    <div class="barra-interior">
+      <h1 class="marca"><span class="marca-punto" aria-hidden="true"></span><a href="/">MerchBot</a> <small>Panel</small></h1>
+      <div class="filtros" id="filtros" hidden>
+        <label>Período
+          <select id="f-periodo">
+            <option value="1">Últimas 24 horas</option>
+            <option value="7" selected>Últimos 7 días</option>
+            <option value="30">Últimos 30 días</option>
+            <option value="todo">Todo</option>
+          </select>
+        </label>
+        <label>Canal
+          <select id="f-canal">
+            <option value="">Todos</option>
+            <option value="web">Web</option>
+            <option value="telegram">Telegram</option>
+            <option value="demo">Guion de demo</option>
+          </select>
+        </label>
+        <button class="boton-texto" id="btn-recargar" type="button">Actualizar</button>
+        <button class="boton-texto" id="btn-salir" type="button">Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="ingreso" id="ingreso" hidden>
+    <h2>Panel de MerchBot</h2>
+    <p id="ingreso-texto">Ingresá la clave del panel (la variable ADMIN_KEY del .env).</p>
+    <form id="form-ingreso">
+      <label class="visualmente-oculto" for="clave">Clave</label>
+      <input type="password" id="clave" autocomplete="current-password" placeholder="Clave del panel" required>
+    </form>
+    <p class="error" id="ingreso-error" hidden></p>
+    <button class="boton" type="submit" form="form-ingreso" id="btn-ingresar">Ingresar</button>
+  </section>
+
+  <main id="panel" hidden>
+    <p class="actualizado" id="actualizado"></p>
+
+    <dl class="cifras" id="cifras" aria-label="Cifras principales"></dl>
+
+    <section class="tarjeta" aria-labelledby="t-horas">
+      <h2 id="t-horas">Consultas por hora del día</h2>
+      <p class="sub">Hora en que llegó cada consulta (la simulada, si se eligió una). La franja marca el horario de atención humana: lo que cae afuera lo atendió solo el asistente.</p>
+      <div class="grafico-horas" id="grafico-horas"></div>
+      <div class="leyenda" aria-hidden="true">
+        <span><i class="muestra" style="background: var(--cian)"></i>Consultas</span>
+        <span><i class="muestra" style="background: var(--cian-fondo); border: 1px solid #B9DCE6"></i>Horario de atención</span>
+      </div>
+      <details>
+        <summary>Ver como tabla</summary>
+        <div class="tabla-envoltorio" id="tabla-horas"></div>
+      </details>
+    </section>
+
+    <div class="dos">
+      <section class="tarjeta" aria-labelledby="t-tipos">
+        <h2 id="t-tipos">Tipo de consulta</h2>
+        <p class="sub">Según las funciones que usó el asistente para responder.</p>
+        <ul class="barras" id="barras-tipos"></ul>
+      </section>
+      <section class="tarjeta" aria-labelledby="t-tools">
+        <h2 id="t-tools">Funciones que llamó el modelo</h2>
+        <p class="sub">Cada uso cuenta, aunque sea en la misma consulta. Los atajos y el formulario no pasan por el modelo.</p>
+        <ul class="barras" id="barras-tools"></ul>
+      </section>
+    </div>
+
+    <section class="tarjeta" aria-labelledby="t-reclamos">
+      <h2 id="t-reclamos">Reclamos</h2>
+      <p class="sub" id="reclamos-sub">Cambiá el estado a medida que el equipo los revisa.</p>
+      <div class="filtros-tabla">
+        <label>Mostrar
+          <select id="f-reclamos">
+            <option value="">Todos</option>
+            <option value="abierto" selected>Abiertos</option>
+            <option value="en_revision">En revisión</option>
+            <option value="resuelto">Resueltos</option>
+          </select>
+        </label>
+      </div>
+      <div class="tabla-envoltorio" id="tabla-reclamos"></div>
+    </section>
+
+    <section class="tarjeta" aria-labelledby="t-inter">
+      <h2 id="t-inter">Registro de interacciones</h2>
+      <p class="sub" id="inter-sub">Las últimas consultas atendidas, de la más nueva a la más vieja.</p>
+      <div class="filtros-tabla">
+        <label>Tipo
+          <select id="f-tipo">
+            <option value="">Todos</option>
+            <option value="stock">Stock</option>
+            <option value="pedidos">Pedidos</option>
+            <option value="reposicion">Reposición</option>
+            <option value="reclamo">Reclamo</option>
+            <option value="resumen">Resumen</option>
+            <option value="conversacion">Conversación</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="f-fuera"> Solo fuera de horario</label>
+        <label><input type="checkbox" id="f-errores"> Solo con error</label>
+      </div>
+      <div class="tabla-envoltorio" id="tabla-inter"></div>
+      <button class="boton-texto" id="btn-mas" type="button" hidden style="margin-top:0.75rem">Mostrar las últimas 100</button>
+    </section>
+  </main>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const escapar = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const miles = (n) => Number(n ?? 0).toLocaleString("es-AR");
+  const NOMBRES_TIPO = { stock: "Stock", pedidos: "Pedidos", reposicion: "Reposición", reclamo: "Reclamo", resumen: "Resumen", conversacion: "Conversación" };
+  const NOMBRES_ESTADO = { abierto: "Abierto", en_revision: "En revisión", resuelto: "Resuelto" };
+  const NOMBRES_RECLAMO = { producto_defectuoso: "Producto fallado", demora: "Demora", error_en_pedido: "Error en el pedido", faltante: "Faltante", otro: "Otro" };
+  const NOMBRES_TOOL = {
+    buscar_stock: "Buscar stock", listar_productos_a_comprar: "Productos a comprar",
+    obtener_pedidos_de_cliente: "Pedidos de un cliente", listar_pedidos_recientes: "Pedidos recientes",
+    obtener_resumen_ejecutivo: "Resumen", listar_categorias_disponibles: "Categorías",
+    registrar_reclamo: "Registrar reclamo", consultar_estado_reclamo: "Consultar reclamo",
+    atajo_comprar: "Atajo: qué comprar", atajo_resumen: "Atajo: resumen", formulario_reclamo: "Formulario de reclamo",
+  };
+  let horario = { atencion_desde: "09:00", atencion_hasta: "18:00" };
+  let limiteInter = 25;
+
+  async function api(ruta, opciones = {}) {
+    const r = await fetch(ruta, { headers: { "Content-Type": "application/json" }, credentials: "same-origin", ...opciones });
+    const datos = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(typeof datos.detail === "string" ? datos.detail : "Error del servidor."); e.status = r.status; throw e; }
+    return datos;
+  }
+
+  // ---------- ingreso ----------
+  function mostrarIngreso(mensaje, deshabilitado = false) {
+    $("#panel").hidden = true; $("#filtros").hidden = true; $("#ingreso").hidden = false;
+    $("#ingreso-texto").textContent = mensaje || "Ingresá la clave del panel (la variable ADMIN_KEY del .env).";
+    $("#form-ingreso").hidden = deshabilitado; $("#btn-ingresar").hidden = deshabilitado;
+    if (!deshabilitado) $("#clave").focus();
+  }
+  function mostrarPanel() { $("#ingreso").hidden = true; $("#panel").hidden = false; $("#filtros").hidden = false; }
+
+  $("#form-ingreso").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    try {
+      await api("/api/admin/login", { method: "POST", body: JSON.stringify({ clave: $("#clave").value }) });
+      $("#clave").value = ""; $("#ingreso-error").hidden = true;
+      mostrarPanel(); cargarTodo();
+    } catch (e) {
+      $("#ingreso-error").textContent = e.message; $("#ingreso-error").hidden = false;
+    }
+  });
+  $("#btn-salir").addEventListener("click", async () => { await api("/api/admin/logout", { method: "POST" }).catch(() => {}); mostrarIngreso(); });
+
+  // ---------- cifras ----------
+  function cifra(etiqueta, valor, detalle, destacada) {
+    return `<div class="cifra${destacada ? " destacada" : ""}"><dt>${etiqueta}</dt><dd><span class="valor">${valor}</span>${detalle ? `<span class="detalle">${detalle}</span>` : ""}</dd></div>`;
+  }
+  function pintarCifras(m) {
+    const t = m.totales;
+    const ms = (v) => v == null ? "—" : v >= 1000 ? `${(v / 1000).toLocaleString("es-AR", { maximumFractionDigits: 1 })} s` : `${miles(v)} ms`;
+    $("#cifras").innerHTML = [
+      cifra("Consultas atendidas", miles(t.interacciones), `${miles(t.usuarios)} usuario(s) distinto(s)`),
+      cifra("Fuera de horario", `${t.porcentaje_fuera_de_horario.toLocaleString("es-AR")} %`, `${miles(t.fuera_de_horario)} consultas sin nadie en el depósito`, true),
+      cifra("Tiempo de respuesta", ms(t.duracion_mediana_ms), `mediana; el 95 % en menos de ${ms(t.duracion_p95_ms)}`),
+      cifra("Con error", `${t.porcentaje_errores.toLocaleString("es-AR")} %`, `${miles(t.errores)} consulta(s)`),
+      cifra("Reclamos abiertos", miles(t.reclamos_abiertos), `${miles(m.reclamos.por_estado.en_revision)} en revisión`),
+    ].join("");
+  }
+
+  // ---------- consultas por hora (SVG) ----------
+  function pintarHoras(porHora) {
+    const cont = $("#grafico-horas");
+    const W = 1000, H = 220, m = { t: 12, r: 8, b: 26, l: 34 };
+    const ancho = W - m.l - m.r, alto = H - m.t - m.b;
+    const max = Math.max(1, ...porHora);
+    const paso = niceStep(max);
+    const tope = Math.ceil(max / paso) * paso;
+    const banda = ancho / 24;
+    const barra = Math.min(24, banda * 0.62);
+    const y = (v) => m.t + alto - (v / tope) * alto;
+    const desde = parseInt(horario.atencion_desde, 10), hasta = parseInt(horario.atencion_hasta, 10);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Consultas por hora del día">`;
+    svg += `<rect x="${m.l + desde * banda}" y="${m.t}" width="${(hasta - desde) * banda}" height="${alto}" fill="var(--cian-fondo)"/>`;
+    for (let v = 0; v <= tope; v += paso) {
+      svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${v === 0 ? "var(--linea)" : "var(--grilla)"}" stroke-width="1"/>`;
+      svg += `<text class="eje" x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end">${miles(v)}</text>`;
+    }
+    porHora.forEach((n, h) => {
+      const x = m.l + h * banda + (banda - barra) / 2;
+      if (n > 0) {
+        const top = y(n), base = y(0), r = Math.min(4, (base - top) / 2);
+        svg += `<path d="M${x},${base} V${top + r} Q${x},${top} ${x + r},${top} H${x + barra - r} Q${x + barra},${top} ${x + barra},${top + r} V${base} Z" fill="var(--cian)"/>`;
+      }
+      if (h % 3 === 0) svg += `<text class="eje" x="${m.l + h * banda + banda / 2}" y="${H - 8}" text-anchor="middle">${String(h).padStart(2, "0")} h</text>`;
+      svg += `<rect x="${m.l + h * banda}" y="${m.t}" width="${banda}" height="${alto}" fill="transparent" data-h="${h}" data-n="${n}"/>`;
+    });
+    svg += "</svg>";
+    cont.innerHTML = svg + '<div class="tooltip" hidden></div>';
+    const tip = cont.querySelector(".tooltip");
+    cont.querySelectorAll("rect[data-h]").forEach((r) => {
+      r.addEventListener("mouseenter", () => {
+        const h = Number(r.dataset.h), n = Number(r.dataset.n);
+        const fuera = h < desde || h >= hasta ? ", fuera de horario" : "";
+        tip.textContent = `${String(h).padStart(2, "0")}:00 a ${String(h).padStart(2, "0")}:59: ${miles(n)} consulta(s)${fuera}`;
+        const caja = cont.getBoundingClientRect(), rr = r.getBoundingClientRect();
+        const svgCaja = cont.querySelector("svg").getBoundingClientRect();
+        const izq = Math.min(Math.max(rr.left - caja.left + cont.scrollLeft + rr.width / 2, cont.scrollLeft + 100), cont.scrollLeft + cont.clientWidth - 100);
+        tip.style.left = `${izq}px`;
+        tip.style.top = `${svgCaja.top - caja.top + (y(n) / H) * svgCaja.height}px`;
+        tip.hidden = false;
+      });
+      r.addEventListener("mouseleave", () => (tip.hidden = true));
+    });
+    $("#tabla-horas").innerHTML = `<table><thead><tr><th>Hora</th><th class="num">Consultas</th></tr></thead><tbody>${
+      porHora.map((n, h) => `<tr><td>${String(h).padStart(2, "0")}:00</td><td class="num">${miles(n)}</td></tr>`).join("")}</tbody></table>`;
+  }
+  function niceStep(max) {
+    const crudo = max / 4, pot = Math.pow(10, Math.floor(Math.log10(crudo || 1)));
+    const f = crudo / pot;
+    return Math.max(1, (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pot);
+  }
+
+  // ---------- barras horizontales ----------
+  function pintarBarras(sel, datos, nombres) {
+    const pares = Object.entries(datos);
+    if (!pares.length) { $(sel).innerHTML = '<li class="vacio">Todavía no hay datos en este período.</li>'; return; }
+    const max = Math.max(...pares.map(([, n]) => n));
+    $(sel).innerHTML = pares.map(([k, n]) => `<li>
+      <span class="nombre" title="${escapar(nombres[k] || k)}">${escapar(nombres[k] || k)}</span>
+      <span class="pista"><span class="relleno" style="display:block;width:${(n / max) * 100}%"></span></span>
+      <span class="numero">${miles(n)}</span></li>`).join("");
+  }
+
+  // ---------- reclamos ----------
+  async function cargarReclamos() {
+    const estado = $("#f-reclamos").value;
+    const { reclamos } = await api(`/api/admin/reclamos${estado ? `?estado=${estado}` : ""}`);
+    if (!reclamos.length) { $("#tabla-reclamos").innerHTML = '<p class="vacio">No hay reclamos con ese estado.</p>'; return; }
+    $("#tabla-reclamos").innerHTML = `<table><thead><tr><th class="num">N.º</th><th>Hora</th><th>Canal</th><th>Tipo</th><th>Qué pasó</th><th>Cliente</th><th>Estado</th></tr></thead><tbody>${
+      reclamos.map((r) => `<tr>
+        <td class="num">${escapar(r.numero)}</td>
+        <td>${escapar(r.hora)}</td>
+        <td>${escapar(r.canal)}</td>
+        <td>${escapar(NOMBRES_RECLAMO[r.tipo] || r.tipo)}</td>
+        <td><span class="recorte" title="${escapar(r.descripcion)}">${escapar(r.descripcion)}</span></td>
+        <td>${escapar(r.cliente || "—")}</td>
+        <td><label class="visualmente-oculto" for="est-${r.numero}">Estado del reclamo ${escapar(r.numero)}</label>
+          <select id="est-${r.numero}" data-numero="${escapar(r.numero)}">
+            ${Object.entries(NOMBRES_ESTADO).map(([v, t]) => `<option value="${v}"${v === r.estado ? " selected" : ""}>${t}</option>`).join("")}
+          </select></td></tr>`).join("")}</tbody></table>`;
+    $("#tabla-reclamos").querySelectorAll("select[data-numero]").forEach((s) => s.addEventListener("change", async () => {
+      s.disabled = true;
+      try { await api(`/api/admin/reclamos/${s.dataset.numero}`, { method: "PATCH", body: JSON.stringify({ estado: s.value }) }); }
+      catch (e) { alertar(e); }
+      cargarTodo();
+    }));
+  }
+
+  // ---------- interacciones ----------
+  async function cargarInteracciones() {
+    const p = new URLSearchParams({ limite: String(limiteInter) });
+    if ($("#f-canal").value) p.set("canal", $("#f-canal").value);
+    if ($("#f-tipo").value) p.set("tipo", $("#f-tipo").value);
+    if ($("#f-fuera").checked) p.set("fuera_de_horario", "true");
+    if ($("#f-errores").checked) p.set("errores", "true");
+    const { interacciones } = await api(`/api/admin/interacciones?${p}`);
+    $("#btn-mas").hidden = limiteInter >= 100 || interacciones.length < limiteInter;
+    if (!interacciones.length) { $("#tabla-inter").innerHTML = '<p class="vacio">No hay consultas que coincidan con los filtros.</p>'; return; }
+    const fecha = (iso) => new Date(iso).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+    $("#tabla-inter").innerHTML = `<table><thead><tr><th>Registrada</th><th>Hora</th><th>Canal</th><th>Tipo</th><th>Consulta</th><th>Respuesta</th><th class="num">Duración</th><th>Estado</th></tr></thead><tbody>${
+      interacciones.map((i) => `<tr>
+        <td class="fecha">${escapar(fecha(i.created_at))}</td>
+        <td>${escapar(i.hora_simulada)}${i.fuera_de_horario ? '<br><span class="luna">fuera de horario</span>' : ""}</td>
+        <td>${escapar(i.canal)}</td>
+        <td>${escapar(NOMBRES_TIPO[i.tipo] || i.tipo)}</td>
+        <td><span class="recorte" title="${escapar(i.consulta)}">${escapar(i.consulta)}</span></td>
+        <td><span class="recorte" title="${escapar(i.respuesta)}">${escapar(i.respuesta || "—")}</span></td>
+        <td class="num">${miles(i.duracion_ms)} ms</td>
+        <td><span class="marca-estado estado-${i.estado === "ok" ? "ok" : "error"}">${i.estado === "ok" ? "OK" : "Error"}</span></td></tr>`).join("")}</tbody></table>`;
+  }
+
+  // ---------- carga ----------
+  function alertar(e) {
+    if (e.status === 401) return mostrarIngreso("Tu sesión del panel venció. Ingresá la clave de nuevo.");
+    $("#actualizado").textContent = `No pude cargar los datos: ${e.message}`;
+  }
+  async function cargarTodo() {
+    const periodo = $("#f-periodo").value;
+    const p = new URLSearchParams(periodo === "todo" ? { todo: "true" } : { dias: periodo });
+    if ($("#f-canal").value) p.set("canal", $("#f-canal").value);
+    try {
+      const m = await api(`/api/admin/metricas?${p}`);
+      pintarCifras(m);
+      pintarHoras(m.por_hora);
+      pintarBarras("#barras-tipos", m.por_tipo, NOMBRES_TIPO);
+      pintarBarras("#barras-tools", m.herramientas, NOMBRES_TOOL);
+      await Promise.all([cargarReclamos(), cargarInteracciones()]);
+      $("#actualizado").textContent = `Actualizado a las ${new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}. Se refresca solo cada minuto.`;
+    } catch (e) { alertar(e); }
+  }
+
+  ["#f-periodo", "#f-canal"].forEach((s) => $(s).addEventListener("change", cargarTodo));
+  $("#f-reclamos").addEventListener("change", () => cargarReclamos().catch(alertar));
+  ["#f-tipo", "#f-fuera", "#f-errores"].forEach((s) => $(s).addEventListener("change", () => cargarInteracciones().catch(alertar)));
+  $("#btn-recargar").addEventListener("click", cargarTodo);
+  $("#btn-mas").addEventListener("click", () => { limiteInter = 100; cargarInteracciones().catch(alertar); });
+
+  (async () => {
+    try { horario = await api("/api/horario"); } catch (_) { /* se usan 9 a 18 */ }
+    const estado = await api("/api/admin/estado").catch(() => ({ configurado: false }));
+    if (!estado.configurado) return mostrarIngreso("El panel está deshabilitado. Definí ADMIN_KEY en el .env y reiniciá MerchBot.", true);
+    if (!estado.autenticado) return mostrarIngreso();
+    mostrarPanel();
+    cargarTodo();
+    setInterval(() => { if (!$("#panel").hidden && document.visibilityState === "visible") cargarTodo(); }, 60000);
+  })();
+})();
+</script>
+</body>
+</html>
