@@ -1,4 +1,4 @@
-"""Sync automático periódico con Google Sheets.
+"""Sync automático periódico con la fuente de datos (Google Sheets o demo).
 
 Usa APScheduler en modo BackgroundScheduler. Cuando inicia el bot:
 1. Hace un sync inicial (que también puebla la DB en el primer arranque).
@@ -14,7 +14,7 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from merchbot.config import settings
-from merchbot.data.sheets_sync import sync_from_sheets
+from merchbot.data.refresh import actualizar_datos
 
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ _scheduler: BackgroundScheduler | None = None
 def _do_sync() -> None:
     """Job que corre en background. Atrapa cualquier excepción."""
     try:
-        result = sync_from_sheets()
+        result = actualizar_datos()
         if result.ok:
             logger.info(
                 "Sync automático OK | stock=%d (%d nuevos, %d upd) | pedidos=%d",
@@ -49,6 +49,10 @@ def start_scheduler() -> BackgroundScheduler:
     _do_sync()
 
     interval_min = settings.sync_interval_min
+    if settings.fuente_de_datos == "demo":
+        logger.info("DATA_SOURCE=demo → datos de la planilla de ejemplo, sin sync periódico.")
+        _scheduler = BackgroundScheduler(timezone="UTC")
+        return _scheduler
     if interval_min <= 0:
         logger.info("SYNC_INTERVAL_MIN=0 → sync automático desactivado, solo /sync manual.")
         _scheduler = BackgroundScheduler(timezone="UTC")  # vacío, no programa nada
