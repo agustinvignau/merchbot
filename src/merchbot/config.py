@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     web_host: str = "127.0.0.1"
     web_port: int = 8000
 
+    # --- RAG de políticas ---
+    politicas_path: Path = BASE_DIR / "data" / "politicas.md"
+    embedding_model: str = "gemini-embedding-001"
+    embedding_dimensiones: int = 768
+    rag_top_k: int = 3
+    # Similitud de coseno mínima para considerar relevante un fragmento.
+    rag_min_score: float = 0.55
+
     # --- Horario de atención humana ---
     # Fuera de este horario el asistente atiende igual y lo aclara; los reclamos
     # quedan registrados para que una persona los vea el próximo día hábil.

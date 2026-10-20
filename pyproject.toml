@@ -21,6 +21,7 @@ dependencies = [
     "APScheduler==3.10.4",
     "openpyxl>=3.1,<4",
     "tzdata",                      # zonas horarias en Windows
+    "numpy>=1.26",                 # similitud de coseno del RAG
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.30,<1",
 ]
