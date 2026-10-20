@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from merchbot.config import settings
+from merchbot.core.assistant import Respuesta
 from merchbot.core.chat_service import ChatService
 from merchbot.core.memory import InMemoryConversationStore
 from merchbot.interfaces.web.app import SESSION_COOKIE, create_app
@@ -18,14 +19,16 @@ class AsistenteFalso:
     def __init__(self):
         self.memoria = InMemoryConversationStore()
         self.falla = False
+        self.ultimo_momento = None
 
-    def ask(self, user_id, query):
+    def responder(self, user_id, query, momento=None, canal="web"):
         if self.falla:
             raise RuntimeError("Gemini caído")
+        self.ultimo_momento = momento
         respuesta = f"eco: {query}"
-        self.memoria.append(user_id, "user", query)
-        self.memoria.append(user_id, "model", respuesta)
-        return respuesta
+        self.memoria.append(user_id, "user", query, hora=momento.hora)
+        self.memoria.append(user_id, "model", respuesta, hora=momento.hora)
+        return Respuesta(respuesta, ["buscar_stock"])
 
     def clear_memory(self, user_id):
         return self.memoria.clear(user_id)
@@ -61,7 +64,8 @@ class TestChat:
     def test_responde_y_crea_cookie_de_sesion(self, client):
         r = client.post("/api/chat", json={"message": "hola"})
         assert r.status_code == 200
-        assert r.json() == {"reply": "eco: hola"}
+        assert r.json()["reply"] == "eco: hola"
+        assert r.json()["tipo"] == "stock"
         assert SESSION_COOKIE in r.cookies
 
     def test_la_cookie_es_httponly(self, client):
@@ -100,10 +104,9 @@ class TestHistorial:
     def test_devuelve_la_conversacion(self, client):
         client.post("/api/chat", json={"message": "hola"})
         r = client.get("/api/historial")
-        assert r.json()["mensajes"] == [
-            {"role": "user", "text": "hola"},
-            {"role": "model", "text": "eco: hola"},
-        ]
+        mensajes = r.json()["mensajes"]
+        assert [(m["role"], m["text"]) for m in mensajes] == [("user", "hola"), ("model", "eco: hola")]
+        assert all(m["hora"] for m in mensajes)
 
     def test_cada_navegador_ve_solo_lo_suyo(self, asistente):
         service = ChatService(assistant=asistente)
@@ -157,3 +160,58 @@ def test_on_startup_se_ejecuta_al_arrancar():
     with TestClient(create_app(service_factory=MagicMock, on_startup=arranque)):
         pass
     arranque.assert_called_once()
+
+
+class TestHoraSimulada:
+    def test_la_hora_simulada_llega_al_asistente_y_vuelve(self, client, asistente):
+        r = client.post("/api/chat", json={"message": "hola", "hora": "03:20"}).json()
+        assert r["hora"] == "03:20"
+        assert r["fuera_de_horario"] is True
+        assert asistente.ultimo_momento.simulada
+
+    def test_sin_hora_usa_la_real(self, client, asistente):
+        r = client.post("/api/chat", json={"message": "hola"}).json()
+        assert not asistente.ultimo_momento.simulada
+        assert len(r["hora"]) == 5
+
+    def test_hora_invalida_es_422(self, client):
+        r = client.post("/api/chat", json={"message": "hola", "hora": "27:00"})
+        assert r.status_code == 422
+        assert "HH:MM" in r.json()["detail"]
+
+    def test_queda_en_el_historial(self, client):
+        client.post("/api/chat", json={"message": "hola", "hora": "22:45"})
+        assert client.get("/api/historial").json()["mensajes"][0]["hora"] == "22:45"
+
+    def test_horario(self, client):
+        r = client.get("/api/horario").json()
+        assert {"hora_actual", "fuera_de_horario", "atencion_desde", "atencion_hasta"} <= r.keys()
+
+
+class TestReclamosWeb:
+    def test_crear_y_consultar(self, client):
+        r = client.post("/api/reclamos", json={
+            "descripcion": "Llegaron 10 gorras rojas descosidas",
+            "tipo": "producto_defectuoso", "cliente": "Globant", "hora": "23:10",
+        })
+        assert r.status_code == 201
+        numero = r.json()["numero"]
+        assert r.json()["fuera_de_horario"] is True
+        consulta = client.get(f"/api/reclamos/{numero}").json()
+        assert consulta["estado"] == "abierto"
+        assert consulta["cliente"] == "Globant"
+
+    def test_descripcion_muy_corta(self, client):
+        assert client.post("/api/reclamos", json={"descripcion": "mal"}).status_code == 422
+
+    def test_reclamo_inexistente(self, client):
+        assert client.get("/api/reclamos/999").status_code == 404
+
+    def test_atajos_quedan_registrados_con_la_sesion(self, client, db_with_data):
+        from merchbot.core.registro import listar_interacciones
+
+        client.get("/api/comprar", params={"hora": "04:00"})
+        [i] = listar_interacciones()
+        assert i["user_id"].startswith("web:")
+        assert i["hora_simulada"] == "04:00"
+

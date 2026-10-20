@@ -8,6 +8,7 @@ Comandos:
     /comprar  - lista productos en rojo (stock <= 0)
     /resumen  - resumen ejecutivo
     /clear    - borra el historial de la conversación
+    /reclamo  - registra un reclamo (/reclamo llegaron 10 gorras rotas)
 
 Mensajes de texto libre se procesan con ChatService (Gemini + function calling).
 
@@ -175,6 +176,8 @@ HELP_TEXT = """Comandos disponibles:
 /comprar  – Listar productos en rojo (stock <= 0)
 /resumen  – Resumen ejecutivo (totales, top cliente, top producto)
 /clear    – Borrar el historial de nuestra conversación
+/reclamo  – Registrar un reclamo. Ej: /reclamo llegaron 10 gorras rotas
+            (también podés contarlo en lenguaje natural)
 
 Además podés escribirme cualquier consulta en lenguaje natural:
 • "¿cuántas remeras negras M tengo?"
@@ -252,7 +255,9 @@ async def cmd_sync(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_comprar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Atajo directo a DB (sin Gemini): productos en rojo."""
     try:
-        productos = await asyncio.to_thread(_service().productos_a_comprar)
+        productos = await asyncio.to_thread(
+            _service().productos_a_comprar, update.effective_user.id, "telegram"
+        )
         await _reply_largo(update, format_comprar_message(productos))
     except Exception as e:
         logger.exception("Error en /comprar")
@@ -265,7 +270,9 @@ async def cmd_comprar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def cmd_resumen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Atajo directo a DB (sin Gemini): resumen ejecutivo."""
     try:
-        resumen = await asyncio.to_thread(_service().resumen_ejecutivo)
+        resumen = await asyncio.to_thread(
+            _service().resumen_ejecutivo, update.effective_user.id, "telegram"
+        )
         await _reply_largo(
             update,
             format_resumen_message(resumen),
@@ -276,6 +283,29 @@ async def cmd_resumen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(
             f"Ups, no pude generar el resumen. ({type(e).__name__})"
         )
+
+
+@requires_auth
+async def cmd_reclamo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Registra un reclamo sin pasar por el modelo: /reclamo <descripción>."""
+    descripcion = " ".join(context.args or []).strip()
+    if len(descripcion) < 5:
+        await update.message.reply_text(
+            "Contame qué pasó después del comando. Ej:\n/reclamo llegaron 10 gorras rojas descosidas"
+        )
+        return
+    resultado = await asyncio.to_thread(
+        _service().registrar_reclamo, update.effective_user.id, descripcion, "otro", None, "telegram"
+    )
+    if not resultado.get("ok"):
+        await update.message.reply_text(resultado.get("error", "No pude registrar el reclamo."))
+        return
+    cuando = (
+        "Lo revisa una persona el próximo día hábil."
+        if resultado.get("fuera_de_horario")
+        else "Lo revisa una persona del equipo."
+    )
+    await update.message.reply_text(f"✅ Reclamo #{resultado['numero']} registrado. {cuando}")
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +325,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
     try:
-        respuesta = await asyncio.to_thread(_service().ask, user_id, texto)
+        respuesta = await asyncio.to_thread(
+            _service().ask, user_id, texto, "telegram"
+        )
         await _reply_largo(update, respuesta)
     except Exception as e:
         logger.exception("Error procesando mensaje de user_id=%s", user_id)
@@ -343,6 +375,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("comprar", cmd_comprar))
     app.add_handler(CommandHandler("resumen", cmd_resumen))
     app.add_handler(CommandHandler("clear", cmd_clear))
+    app.add_handler(CommandHandler("reclamo", cmd_reclamo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(on_error)
 

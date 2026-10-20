@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MerchBot</title>
-<meta name="description" content="Consultá el stock y los pedidos de la empresa en lenguaje natural.">
+<meta name="description" content="Consultá el stock y los pedidos de la empresa en lenguaje natural, a cualquier hora.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Familjen+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -17,10 +17,12 @@
     --linea: #D6DCE3;
     --magenta: #C8175D;
     --magenta-hover: #A3124B;
+    --magenta-fondo: #FBE9F0;
     --cian: #0E7490;
     --cian-fondo: #E3F1F5;
     --amarillo: #F2C230;
     --amarillo-fondo: #FDF4D6;
+    --noche: #1E2A3D;
     --foco: #0E7490;
     --radio-chico: 6px;
     --ancho: 760px;
@@ -40,29 +42,27 @@
     display: flex;
     flex-direction: column;
   }
-
   :focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
-  button { font: inherit; cursor: pointer; }
+  button, select, input, textarea { font: inherit; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
 
   /* ---------- Encabezado ---------- */
-  .barra {
-    border-bottom: 1px solid var(--linea);
-    background: var(--superficie);
-  }
+  .barra { border-bottom: 1px solid var(--linea); background: var(--superficie); }
   .barra-interior {
     max-width: var(--ancho);
     margin: 0 auto;
-    padding: 0.75rem 1rem;
+    padding: 0.65rem 1rem;
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
   }
   .marca {
     font-family: var(--display);
     font-weight: 700;
     font-size: 1.25rem;
     letter-spacing: -0.01em;
-    margin: 0;
+    margin: 0 auto 0 0;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -70,11 +70,6 @@
   .marca-punto {
     width: 0.7rem; height: 0.7rem; border-radius: 50%;
     background: conic-gradient(var(--cian) 0 33%, var(--magenta) 0 66%, var(--amarillo) 0);
-  }
-  .estado {
-    color: var(--tinta-suave);
-    font-size: 0.875rem;
-    margin-right: auto;
   }
   .boton-texto {
     background: none;
@@ -87,21 +82,51 @@
   }
   .boton-texto:hover { border-color: var(--linea); background: var(--papel); }
 
-  /* ---------- Conversación ---------- */
-  main {
-    flex: 1;
-    overflow-y: auto;
-    scroll-behavior: smooth;
+  /* Reloj de la demo: elegir a qué hora "llega" la consulta */
+  .reloj {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid var(--linea);
+    border-radius: 999px;
+    padding: 0.2rem 0.35rem 0.2rem 0.6rem;
+    background: var(--papel);
+    font-size: 0.875rem;
   }
+  .reloj[data-simulada="true"] { border-color: var(--tinta); background: var(--superficie); }
+  .reloj svg { flex: none; }
+  .reloj select, .reloj input {
+    border: none;
+    background: transparent;
+    color: var(--tinta);
+    font-size: 0.875rem;
+    padding: 0.15rem 0.2rem;
+  }
+  .reloj input { width: 5.5rem; }
+
+  /* Franja de horario: aparece solo fuera del horario de atención */
+  .franja-horario {
+    background: var(--noche);
+    color: #E6EBF2;
+    font-size: 0.875rem;
+  }
+  .franja-horario p {
+    max-width: var(--ancho);
+    margin: 0 auto;
+    padding: 0.45rem 1rem;
+  }
+  .franja-horario strong { color: #fff; }
+
+  /* ---------- Conversación ---------- */
+  main { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
   .conversacion {
     max-width: var(--ancho);
     margin: 0 auto;
     padding: 1.5rem 1rem 2rem;
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 1.1rem;
   }
-
   .bienvenida h2 {
     font-family: var(--display);
     font-weight: 600;
@@ -114,16 +139,8 @@
   .bienvenida p { color: var(--tinta-suave); margin: 0 0 1.5rem; max-width: 56ch; }
 
   /* Etiquetas colgantes: el gesto propio de la interfaz */
-  .etiquetas {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.9rem 0.75rem;
-    padding: 0;
-    margin: 0;
-    list-style: none;
-  }
+  .etiquetas { display: flex; flex-wrap: wrap; gap: 0.9rem 0.75rem; padding: 0; margin: 0; list-style: none; }
   .etiqueta {
-    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 0.55rem;
@@ -138,7 +155,7 @@
     transform-origin: 0.6rem 50%;
     transition: transform 160ms ease, box-shadow 160ms ease;
   }
-  .etiqueta::before {          /* ojal de la etiqueta */
+  .etiqueta::before {
     content: "";
     width: 0.5rem; height: 0.5rem;
     border-radius: 50%;
@@ -149,32 +166,24 @@
   .etiqueta:hover { transform: rotate(-2deg); box-shadow: 0 6px 14px -8px rgba(24, 33, 46, 0.45); }
   .etiqueta:active { transform: rotate(0); }
   .etiqueta[data-tipo="atajo"] { --color-etiqueta: var(--magenta); font-weight: 700; }
+  .etiqueta[data-tipo="reclamo"] { --color-etiqueta: var(--amarillo); font-weight: 700; }
   .etiqueta[disabled] { opacity: 0.5; cursor: progress; transform: none; }
 
-  .mensaje { max-width: 100%; }
-  .mensaje-usuario {
-    align-self: flex-end;
+  .mensaje { max-width: 100%; display: flex; flex-direction: column; gap: 0.2rem; }
+  .mensaje-usuario { align-self: flex-end; align-items: flex-end; max-width: min(85%, 34rem); }
+  .mensaje-bot, .mensaje-error { align-self: flex-start; max-width: 62ch; }
+  .burbuja { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .mensaje-usuario .burbuja {
     background: var(--tinta);
     color: #fff;
     padding: 0.6rem 0.9rem;
     border-radius: 14px 14px 3px 14px;
-    max-width: min(85%, 34rem);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
   }
-  .mensaje-bot {
-    align-self: flex-start;
-    border-left: 3px solid var(--cian);
-    padding: 0.1rem 0 0.1rem 0.9rem;
-    max-width: 62ch;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .mensaje-error {
-    align-self: flex-start;
+  .mensaje-bot .burbuja { border-left: 3px solid var(--cian); padding: 0.1rem 0 0.1rem 0.9rem; }
+  .mensaje-error .burbuja {
     border-left: 3px solid var(--magenta);
     padding: 0.4rem 0.9rem;
-    background: #FBE9F0;
+    background: var(--magenta-fondo);
     border-radius: 0 var(--radio-chico) var(--radio-chico) 0;
   }
   .mensaje-error button {
@@ -182,25 +191,34 @@
     background: none; border: none; padding: 0;
     color: var(--magenta-hover); text-decoration: underline; font-weight: 700;
   }
+  .sello {
+    font-size: 0.78rem;
+    color: var(--tinta-suave);
+    font-variant-numeric: tabular-nums;
+  }
+  .mensaje-bot .sello { padding-left: 0.95rem; }
+  .sello .luna { color: var(--noche); font-weight: 700; }
 
   /* Bloques de datos (atajos sin IA) */
   .datos { white-space: normal; }
-  .datos h3 {
-    font-family: var(--display);
-    font-size: 1.05rem;
-    font-weight: 600;
-    margin: 0 0 0.5rem;
-  }
+  .datos h3 { font-family: var(--display); font-size: 1.05rem; font-weight: 600; margin: 0 0 0.5rem; }
   .tabla { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
   .tabla th { text-align: left; font-weight: 700; color: var(--tinta-suave); padding: 0.3rem 0.75rem 0.3rem 0; border-bottom: 1px solid var(--linea); }
   .tabla td { padding: 0.35rem 0.75rem 0.35rem 0; border-bottom: 1px solid var(--linea); vertical-align: top; }
-  .tabla td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tabla td.num, .tabla th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .falta { background: var(--amarillo-fondo); border-radius: 4px; padding: 0 0.35rem; font-weight: 700; }
   .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; margin: 0; }
   .cifras div { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--radio-chico); padding: 0.6rem 0.75rem; }
   .cifras dt { font-size: 0.85rem; color: var(--tinta-suave); }
   .cifras dd { margin: 0; font-family: var(--display); font-size: 1.4rem; font-weight: 600; font-variant-numeric: tabular-nums; }
   .nota { color: var(--tinta-suave); font-size: 0.9rem; margin: 0.6rem 0 0; }
+  .comprobante {
+    background: var(--superficie);
+    border: 1px dashed var(--tinta-suave);
+    border-radius: var(--radio-chico);
+    padding: 0.75rem 0.9rem;
+  }
+  .comprobante .numero { font-family: var(--display); font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
 
   .escribiendo { align-self: flex-start; display: flex; gap: 0.3rem; padding: 0.6rem 0 0.6rem 0.9rem; border-left: 3px solid var(--cian); }
   .escribiendo span { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--cian); animation: pulso 1s infinite ease-in-out; }
@@ -210,10 +228,20 @@
 
   /* ---------- Redactor ---------- */
   .redactor { border-top: 1px solid var(--linea); background: var(--superficie); }
+  .atajos {
+    max-width: var(--ancho);
+    margin: 0 auto;
+    padding: 0.6rem 1rem 0;
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+  }
+  .atajos .etiqueta { font-size: 0.85rem; padding: 0.3rem 0.7rem 0.3rem 0.6rem; white-space: nowrap; }
+  .atajos .etiqueta::before { width: 0.4rem; height: 0.4rem; }
   .redactor form {
     max-width: var(--ancho);
     margin: 0 auto;
-    padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+    padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom));
     display: flex;
     gap: 0.6rem;
     align-items: flex-end;
@@ -224,7 +252,6 @@
     min-height: 2.9rem;
     max-height: 9rem;
     padding: 0.7rem 0.85rem;
-    font: inherit;
     color: var(--tinta);
     background: var(--papel);
     border: 1px solid var(--linea);
@@ -244,11 +271,40 @@
   .boton-enviar:disabled { background: #B9C1CC; cursor: not-allowed; }
   .ayuda { max-width: var(--ancho); margin: -0.35rem auto 0; padding: 0 1rem 0.6rem; font-size: 0.8rem; color: var(--tinta-suave); }
 
+  /* ---------- Formulario de reclamo ---------- */
+  dialog {
+    border: 1px solid var(--linea);
+    border-radius: 12px;
+    padding: 0;
+    width: min(30rem, calc(100vw - 2rem));
+    color: var(--tinta);
+    box-shadow: 0 24px 48px -24px rgba(24, 33, 46, 0.5);
+  }
+  dialog::backdrop { background: rgba(24, 33, 46, 0.45); }
+  dialog form { padding: 1.25rem; display: flex; flex-direction: column; gap: 0.9rem; }
+  dialog h2 { font-family: var(--display); font-weight: 600; font-size: 1.3rem; margin: 0; }
+  dialog p { margin: 0; color: var(--tinta-suave); font-size: 0.92rem; }
+  .campo { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.92rem; font-weight: 700; }
+  .campo span { font-weight: 400; color: var(--tinta-suave); }
+  .campo select, .campo input, .campo textarea {
+    border: 1px solid var(--linea);
+    border-radius: var(--radio-chico);
+    padding: 0.55rem 0.7rem;
+    background: var(--papel);
+    color: var(--tinta);
+    font-weight: 400;
+  }
+  .campo textarea { min-height: 6rem; resize: vertical; }
+  .acciones { display: flex; justify-content: flex-end; gap: 0.5rem; }
+  .boton-secundario { background: none; border: 1px solid var(--linea); border-radius: 10px; padding: 0.55rem 1rem; color: var(--tinta); }
+  .acciones .boton-enviar { height: auto; padding: 0.55rem 1.1rem; }
+  .error-form { color: var(--magenta-hover); font-size: 0.9rem; margin: 0; }
+
   .visualmente-oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-  @media (max-width: 560px) {
-    .estado, .largo { display: none; }
-    .marca { margin-right: auto; }
+  @media (max-width: 600px) {
+    .largo { display: none; }
+    .barra-interior { gap: 0.4rem; flex-wrap: wrap; }
     .etiqueta { font-size: 0.9rem; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -260,29 +316,51 @@
   <header class="barra">
     <div class="barra-interior">
       <h1 class="marca"><span class="marca-punto" aria-hidden="true"></span>MerchBot</h1>
-      <span class="estado" id="estado">Conectando…</span>
+      <div class="reloj" id="reloj" data-simulada="false" title="Elegí a qué hora llega la consulta para mostrar la atención 24/7">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <label class="visualmente-oculto" for="hora-select">Hora de la consulta</label>
+        <select id="hora-select">
+          <option value="">Ahora</option>
+          <option value="09:30">Mañana, 09:30</option>
+          <option value="15:00">Tarde, 15:00</option>
+          <option value="22:45">Noche, 22:45</option>
+          <option value="03:20">Madrugada, 03:20</option>
+          <option value="otra">Otra hora…</option>
+        </select>
+        <label class="visualmente-oculto" for="hora-otra">Hora personalizada</label>
+        <input type="time" id="hora-otra" hidden>
+      </div>
       <button class="boton-texto" id="btn-actualizar" type="button" title="Volver a cargar el stock y los pedidos">Actualizar<span class="largo"> datos</span></button>
       <button class="boton-texto" id="btn-nueva" type="button" aria-label="Nueva conversación">Nueva<span class="largo"> conversación</span></button>
     </div>
   </header>
+  <div class="franja-horario" id="franja" hidden>
+    <p id="franja-texto"></p>
+  </div>
 
   <main id="scroll">
     <div class="conversacion" id="conversacion" aria-live="polite">
       <section class="bienvenida" id="bienvenida">
         <h2>¿Qué querés saber del stock?</h2>
-        <p>Preguntá como le preguntarías al encargado del depósito: por un producto, un color, un talle o un cliente. Las cantidades salen de la base de datos, no las inventa el asistente.</p>
+        <p>Preguntá como le preguntarías al encargado del depósito: por un producto, un color, un talle o un cliente. Las cantidades salen de la base de datos, no las inventa el asistente. Atiende a cualquier hora, y si algo salió mal podés dejar un reclamo.</p>
         <ul class="etiquetas" aria-label="Consultas rápidas">
           <li><button class="etiqueta" data-tipo="atajo" data-accion="comprar" type="button">Qué hay que comprar</button></li>
           <li><button class="etiqueta" data-tipo="atajo" data-accion="resumen" type="button">Resumen del inventario</button></li>
           <li><button class="etiqueta" data-pregunta="¿Cuántas remeras negras talle M tengo?" type="button">Remeras negras talle M</button></li>
           <li><button class="etiqueta" data-pregunta="¿Qué pidió Coca-Cola?" type="button">Pedidos de Coca-Cola</button></li>
           <li><button class="etiqueta" data-pregunta="Necesito 200 buzos canguro grises L para un evento, ¿me alcanza?" type="button">¿Alcanzan 200 buzos grises L?</button></li>
+          <li><button class="etiqueta" data-tipo="reclamo" data-accion="reclamo" type="button">Dejar un reclamo</button></li>
         </ul>
       </section>
     </div>
   </main>
 
   <footer class="redactor">
+    <div class="atajos" id="atajos" hidden aria-label="Atajos">
+      <button class="etiqueta" data-tipo="atajo" data-accion="comprar" type="button">Qué comprar</button>
+      <button class="etiqueta" data-tipo="atajo" data-accion="resumen" type="button">Resumen</button>
+      <button class="etiqueta" data-tipo="reclamo" data-accion="reclamo" type="button">Reclamo</button>
+    </div>
     <form id="form" autocomplete="off">
       <label class="visualmente-oculto" for="entrada">Tu consulta</label>
       <textarea id="entrada" rows="1" maxlength="2000" placeholder="Ej.: ¿quedan gorras rojas?"></textarea>
@@ -291,39 +369,117 @@
     <p class="ayuda">Enter para enviar, Shift + Enter para una línea nueva.</p>
   </footer>
 
+  <dialog id="dialogo-reclamo" aria-labelledby="titulo-reclamo">
+    <form id="form-reclamo" method="dialog">
+      <h2 id="titulo-reclamo">Dejar un reclamo</h2>
+      <p>Queda registrado con un número. Lo revisa una persona del equipo; si es fuera de horario, el próximo día hábil.</p>
+      <label class="campo">Qué pasó
+        <textarea id="reclamo-descripcion" required minlength="5" maxlength="2000" placeholder="Ej.: llegaron 20 remeras blancas M con manchas de tinta"></textarea>
+      </label>
+      <label class="campo">Tipo
+        <select id="reclamo-tipo">
+          <option value="producto_defectuoso">Producto fallado</option>
+          <option value="demora">Pedido demorado</option>
+          <option value="error_en_pedido">Error en el pedido</option>
+          <option value="faltante">Faltante</option>
+          <option value="otro">Otro</option>
+        </select>
+      </label>
+      <label class="campo">Cliente o pedido <span>(opcional)</span>
+        <input id="reclamo-cliente" maxlength="160" placeholder="Ej.: Coca-Cola, Evento Verano">
+      </label>
+      <p class="error-form" id="reclamo-error" hidden></p>
+      <div class="acciones">
+        <button class="boton-secundario" type="button" id="reclamo-cancelar">Cancelar</button>
+        <button class="boton-enviar" type="submit" id="reclamo-enviar">Registrar reclamo</button>
+      </div>
+    </form>
+  </dialog>
+
 <script>
 (() => {
   const $ = (sel) => document.querySelector(sel);
   const conversacion = $("#conversacion");
   const scroll = $("#scroll");
   const bienvenida = $("#bienvenida");
+  const atajos = $("#atajos");
   const form = $("#form");
   const entrada = $("#entrada");
   const btnEnviar = $("#btn-enviar");
-  const estado = $("#estado");
+  const reloj = $("#reloj");
+  const horaSelect = $("#hora-select");
+  const horaOtra = $("#hora-otra");
+  const franja = $("#franja");
+  const franjaTexto = $("#franja-texto");
   let ocupado = false;
+  let horario = null;   // { hora_actual, dia, dia_habil, atencion_desde, atencion_hasta }
 
   // ---------- utilidades ----------
-  const escapar = (t) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const escapar = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   // Formato mínimo y seguro: el texto se escapa primero y después se marcan las negritas.
   const formatear = (t) => escapar(t)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[\s(])\*(?!\s)(.+?)\*(?=[\s.,;:!?)]|$)/gm, "$1<strong>$2</strong>");
   const miles = (n) => Number(n).toLocaleString("es-AR");
+  const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+  const leer = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
 
+  // ---------- hora de la demo ----------
+  function horaElegida() {
+    if (horaSelect.value === "otra") return horaOtra.value || null;
+    return horaSelect.value || null;
+  }
+  function fueraDeHorario(hora) {
+    if (!horario) return false;
+    if (!horario.dia_habil) return true;
+    return !(hora >= horario.atencion_desde && hora < horario.atencion_hasta);
+  }
+  function horaReal() {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+  function actualizarReloj() {
+    const elegida = horaElegida();
+    reloj.dataset.simulada = elegida ? "true" : "false";
+    horaOtra.hidden = horaSelect.value !== "otra";
+    horaSelect.options[0].textContent = `Ahora, ${horaReal()}`;
+    const hora = elegida || horaReal();
+    if (fueraDeHorario(hora)) {
+      const motivo = horario && !horario.dia_habil ? "Hoy no es día hábil" : `Son las ${hora}`;
+      franjaTexto.innerHTML = `${escapar(motivo)}: <strong>el depósito está cerrado</strong>, el asistente responde igual. ` +
+        `Los reclamos los revisa una persona el próximo día hábil (de ${escapar(horario?.atencion_desde ?? "09:00")} a ${escapar(horario?.atencion_hasta ?? "18:00")}).`;
+      franja.hidden = false;
+    } else {
+      franja.hidden = true;
+    }
+    guardar("merchbot-hora", horaSelect.value === "otra" ? `otra|${horaOtra.value}` : horaSelect.value);
+  }
+  function restaurarHora() {
+    const g = leer("merchbot-hora");
+    if (!g) return;
+    if (g.startsWith("otra|")) { horaSelect.value = "otra"; horaOtra.value = g.slice(5); }
+    else if ([...horaSelect.options].some((o) => o.value === g)) { horaSelect.value = g; }
+  }
+
+  // ---------- mensajes ----------
   function alFinal() { scroll.scrollTop = scroll.scrollHeight; }
-
-  function agregar(html, clase) {
+  function sello(hora, fuera) {
+    if (!hora) return "";
+    const marca = fuera ? ', <span class="luna">fuera de horario</span>' : "";
+    return `<span class="sello">${escapar(hora)}${marca}</span>`;
+  }
+  function agregar(htmlBurbuja, clase, hora, fuera) {
     bienvenida.hidden = true;
+    atajos.hidden = false;
     const div = document.createElement("div");
     div.className = `mensaje ${clase}`;
-    div.innerHTML = html;
+    div.innerHTML = `<div class="burbuja">${htmlBurbuja}</div>${sello(hora, fuera)}`;
     conversacion.appendChild(div);
     alFinal();
     return div;
   }
-  const agregarUsuario = (t) => agregar(escapar(t), "mensaje-usuario");
-  const agregarBot = (t) => agregar(formatear(t), "mensaje-bot");
+  const agregarUsuario = (t, hora, fuera) => agregar(escapar(t), "mensaje-usuario", hora, fuera);
+  const agregarBot = (t, hora) => agregar(formatear(t), "mensaje-bot", hora);
 
   function agregarError(texto, reintentar) {
     const div = agregar(escapar(texto), "mensaje-error");
@@ -332,10 +488,9 @@
       b.type = "button";
       b.textContent = "Reintentar";
       b.addEventListener("click", () => { div.remove(); reintentar(); });
-      div.appendChild(b);
+      div.querySelector(".burbuja").appendChild(b);
     }
   }
-
   function mostrarEscribiendo() {
     const div = document.createElement("div");
     div.className = "escribiendo";
@@ -345,37 +500,38 @@
     alFinal();
     return div;
   }
-
   function setOcupado(v) {
     ocupado = v;
     btnEnviar.disabled = v;
     document.querySelectorAll(".etiqueta").forEach((b) => (b.disabled = v));
   }
-
   async function api(ruta, opciones = {}) {
     const r = await fetch(ruta, { headers: { "Content-Type": "application/json" }, credentials: "same-origin", ...opciones });
     const datos = await r.json().catch(() => ({}));
     if (!r.ok) {
-      const detalle = typeof datos.detail === "string" ? datos.detail : "El servidor respondió con un error.";
+      const d = datos.detail;
+      const detalle = typeof d === "string" ? d : Array.isArray(d) ? "Revisá los datos ingresados." : "El servidor respondió con un error.";
       throw new Error(detalle);
     }
     return datos;
   }
+  const conHora = (ruta) => { const h = horaElegida(); return h ? `${ruta}?hora=${encodeURIComponent(h)}` : ruta; };
 
   // ---------- conversación ----------
   async function enviar(texto) {
     texto = texto.trim();
     if (!texto || ocupado) return;
-    agregarUsuario(texto);
+    const hora = horaElegida() || horaReal();
+    const usuario = agregarUsuario(texto, hora, fueraDeHorario(hora));
     setOcupado(true);
     const indicador = mostrarEscribiendo();
     try {
-      const { reply } = await api("/api/chat", { method: "POST", body: JSON.stringify({ message: texto }) });
+      const r = await api("/api/chat", { method: "POST", body: JSON.stringify({ message: texto, hora: horaElegida() }) });
       indicador.remove();
-      agregarBot(reply);
+      agregarBot(r.reply, r.hora);
     } catch (e) {
       indicador.remove();
-      agregarError(e.message, () => { conversacion.lastElementChild?.classList.contains("mensaje-usuario") && conversacion.lastElementChild.remove(); enviar(texto); });
+      agregarError(e.message, () => { usuario.remove(); enviar(texto); });
     } finally {
       setOcupado(false);
       entrada.focus();
@@ -384,11 +540,12 @@
 
   // ---------- atajos sin IA ----------
   async function atajoComprar() {
-    agregarUsuario("Qué hay que comprar");
+    const hora = horaElegida() || horaReal();
+    agregarUsuario("Qué hay que comprar", hora, fueraDeHorario(hora));
     setOcupado(true);
     try {
-      const { productos } = await api("/api/comprar");
-      if (!productos.length) { agregarBot("No hay nada para comprar: todos los productos tienen stock."); return; }
+      const { productos } = await api(conHora("/api/comprar"));
+      if (!productos.length) { agregarBot("No hay nada para comprar: todos los productos tienen stock.", hora); return; }
       const total = productos.reduce((s, p) => s + Math.max(0, -p.stock_actual), 0);
       const filas = productos.map((p) => `
         <tr><td>${escapar(p.descripcion)}<br><small>${escapar(p.sku)}</small></td>
@@ -396,17 +553,18 @@
         <td class="num">${p.stock_actual < 0 ? `<span class="falta">${miles(-p.stock_actual)}</span>` : "—"}</td></tr>`).join("");
       agregar(`<div class="datos"><h3>${productos.length} producto(s) para reponer</h3>
         <table class="tabla"><thead><tr><th>Producto</th><th class="num">Stock</th><th class="num">Faltan</th></tr></thead><tbody>${filas}</tbody></table>
-        ${total ? `<p class="nota">Total a comprar para cubrir lo pedido: <strong>${miles(total)} unidades</strong>.</p>` : ""}</div>`, "mensaje-bot");
+        ${total ? `<p class="nota">Total a comprar para cubrir lo pedido: <strong>${miles(total)} unidades</strong>.</p>` : ""}</div>`, "mensaje-bot", hora);
     } catch (e) {
       agregarError(e.message, atajoComprar);
     } finally { setOcupado(false); }
   }
 
   async function atajoResumen() {
-    agregarUsuario("Resumen del inventario");
+    const hora = horaElegida() || horaReal();
+    agregarUsuario("Resumen del inventario", hora, fueraDeHorario(hora));
     setOcupado(true);
     try {
-      const r = await api("/api/resumen");
+      const r = await api(conHora("/api/resumen"));
       const cifra = (t, v) => `<div><dt>${t}</dt><dd>${miles(v)}</dd></div>`;
       agregar(`<div class="datos"><h3>Resumen del inventario</h3>
         <dl class="cifras">
@@ -419,11 +577,55 @@
         </dl>
         ${r.top_cliente ? `<p class="nota">Cliente con más unidades: <strong>${escapar(r.top_cliente.nombre)}</strong> (${miles(r.top_cliente.unidades)}).</p>` : ""}
         ${r.top_producto ? `<p class="nota">Producto más pedido: <strong>${escapar(r.top_producto.nombre)}</strong> (${miles(r.top_producto.unidades)}).</p>` : ""}
-        </div>`, "mensaje-bot");
+        </div>`, "mensaje-bot", hora);
     } catch (e) {
       agregarError(e.message, atajoResumen);
     } finally { setOcupado(false); }
   }
+
+  // ---------- reclamos ----------
+  const dialogo = $("#dialogo-reclamo");
+  const errorReclamo = $("#reclamo-error");
+  function abrirReclamo() {
+    errorReclamo.hidden = true;
+    dialogo.showModal();
+    $("#reclamo-descripcion").focus();
+  }
+  $("#reclamo-cancelar").addEventListener("click", () => dialogo.close());
+  $("#form-reclamo").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const descripcion = $("#reclamo-descripcion").value.trim();
+    if (descripcion.length < 5) {
+      errorReclamo.textContent = "Contá qué pasó con un poco más de detalle.";
+      errorReclamo.hidden = false;
+      return;
+    }
+    const boton = $("#reclamo-enviar");
+    boton.disabled = true;
+    try {
+      const r = await api("/api/reclamos", { method: "POST", body: JSON.stringify({
+        descripcion,
+        tipo: $("#reclamo-tipo").value,
+        cliente: $("#reclamo-cliente").value.trim() || null,
+        hora: horaElegida(),
+      }) });
+      dialogo.close();
+      $("#form-reclamo").reset();
+      agregarUsuario(`Reclamo: ${descripcion}`, r.hora, r.fuera_de_horario);
+      const cuando = r.fuera_de_horario
+        ? "Ahora el depósito está cerrado: lo revisa una persona el próximo día hábil."
+        : "Lo revisa una persona del equipo.";
+      agregar(`<div class="comprobante datos">
+          <div class="numero">Reclamo #${escapar(r.numero)}</div>
+          <p class="nota">Registrado a las ${escapar(r.hora)}. ${escapar(cuando)} Guardá el número para consultarlo: “¿cómo va el reclamo ${escapar(r.numero)}?”.</p>
+        </div>`, "mensaje-bot", r.hora);
+    } catch (e) {
+      errorReclamo.textContent = e.message;
+      errorReclamo.hidden = false;
+    } finally {
+      boton.disabled = false;
+    }
+  });
 
   // ---------- eventos ----------
   form.addEventListener("submit", (ev) => {
@@ -442,14 +644,23 @@
   document.querySelectorAll(".etiqueta").forEach((b) => b.addEventListener("click", () => {
     if (b.dataset.accion === "comprar") return atajoComprar();
     if (b.dataset.accion === "resumen") return atajoResumen();
+    if (b.dataset.accion === "reclamo") return abrirReclamo();
     enviar(b.dataset.pregunta);
   }));
+
+  horaSelect.addEventListener("change", () => {
+    if (horaSelect.value === "otra" && !horaOtra.value) horaOtra.value = "02:00";
+    actualizarReloj();
+    if (horaSelect.value === "otra") horaOtra.focus();
+  });
+  horaOtra.addEventListener("change", actualizarReloj);
 
   $("#btn-nueva").addEventListener("click", async () => {
     if (ocupado) return;
     try { await api("/api/historial", { method: "DELETE" }); } catch (_) { /* si falla, igual limpiamos la vista */ }
     conversacion.querySelectorAll(".mensaje, .escribiendo").forEach((n) => n.remove());
     bienvenida.hidden = false;
+    atajos.hidden = true;
     entrada.focus();
   });
 
@@ -460,7 +671,7 @@
     b.textContent = "Actualizando…";
     try {
       const r = await api("/api/sync", { method: "POST" });
-      estado.textContent = `${r.fuente === "demo" ? "Datos de demo" : "Google Sheets"}: ${miles(r.productos)} productos, ${miles(r.pedidos)} pedidos`;
+      b.title = `${r.fuente === "demo" ? "Datos de demo" : "Google Sheets"}: ${miles(r.productos)} productos, ${miles(r.pedidos)} pedidos`;
     } catch (e) {
       agregarError(`No pude actualizar los datos. ${e.message}`);
     } finally { b.disabled = false; b.innerHTML = original; }
@@ -468,15 +679,15 @@
 
   // ---------- arranque ----------
   (async () => {
-    try {
-      const h = await api("/health");
-      estado.textContent = h.fuente_de_datos === "demo" ? "Datos de demo" : "Conectado a Google Sheets";
-    } catch (_) {
-      estado.textContent = "Sin conexión con el servidor";
-    }
+    restaurarHora();
+    try { horario = await api("/api/horario"); } catch (_) { /* sin horario: no se muestra la franja */ }
+    actualizarReloj();
+    setInterval(() => { if (!horaElegida()) actualizarReloj(); }, 30000);
     try {
       const { mensajes } = await api("/api/historial");
-      mensajes.forEach((m) => (m.role === "user" ? agregarUsuario(m.text) : agregarBot(m.text)));
+      mensajes.forEach((m) => (m.role === "user"
+        ? agregarUsuario(m.text, m.hora, m.hora && fueraDeHorario(m.hora))
+        : agregarBot(m.text, m.hora)));
     } catch (_) { /* sin historial: queda la bienvenida */ }
     entrada.focus();
   })();
