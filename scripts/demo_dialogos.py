@@ -7,8 +7,9 @@ y los datos de la planilla de demo.
 Uso:
     python scripts/demo_dialogos.py                    # escribe docs/DIALOGOS_DEMO.md
     python scripts/demo_dialogos.py --salida otra.md
+    python scripts/demo_dialogos.py --en-la-base       # registra en la base de la app (para verlo en /admin)
 
-Cada corrida usa una base temporal: no toca la base de la app.
+Por defecto usa una base temporal y no toca la base de la app.
 """
 from __future__ import annotations
 
@@ -109,12 +110,15 @@ def a_markdown(resultados: list[dict], modelo: str) -> str:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--salida", default=str(RAIZ / "docs" / "DIALOGOS_DEMO.md"))
+    parser.add_argument("--en-la-base", action="store_true",
+                        help="usar la base configurada en .env en vez de una temporal")
     args = parser.parse_args(argv)
 
     # Base temporal y datos de demo, antes de importar la app (lee la config al importar).
-    tmp = tempfile.mkdtemp(prefix="merchbot-demo-")
-    os.environ["DATABASE_URL"] = f"sqlite:///{Path(tmp) / 'demo.db'}"
-    os.environ["DATA_SOURCE"] = "demo"
+    if not args.en_la_base:
+        tmp = tempfile.mkdtemp(prefix="merchbot-demo-")
+        os.environ["DATABASE_URL"] = f"sqlite:///{Path(tmp) / 'demo.db'}"
+        os.environ["DATA_SOURCE"] = "demo"
     sys.path.insert(0, str(RAIZ / "src"))
 
     from merchbot.config import settings
@@ -126,8 +130,8 @@ def main(argv=None) -> int:
         print("Falta GEMINI_API_KEY en el .env: el guion usa el asistente real.")
         return 1
     init_db()
-    carga = cargar_datos_demo()
-    if not carga.ok:
+    carga = cargar_datos_demo() if not args.en_la_base else None
+    if carga is not None and not carga.ok:
         print(carga.resumen())
         return 1
 
