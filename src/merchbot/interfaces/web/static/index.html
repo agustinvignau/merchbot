@@ -268,8 +268,33 @@
     font-weight: 700;
   }
   .boton-enviar:hover { background: var(--magenta-hover); }
+
+  /* Micrófono */
+  .boton-mic {
+    flex: none;
+    width: 2.9rem; height: 2.9rem;
+    border-radius: 50%;
+    border: 1px solid var(--linea);
+    background: var(--superficie);
+    color: var(--tinta);
+    display: grid; place-items: center;
+    position: relative;
+  }
+  .boton-mic:hover { background: var(--papel); }
+  .boton-mic[aria-pressed="true"] { background: var(--magenta); border-color: var(--magenta); color: #fff; }
+  .boton-mic[aria-pressed="true"]::after {
+    content: ""; position: absolute; inset: -5px; border-radius: 50%;
+    border: 2px solid var(--magenta); opacity: 0.6;
+    animation: onda 1.2s ease-out infinite;
+  }
+  @keyframes onda { from { transform: scale(0.9); opacity: 0.7; } to { transform: scale(1.35); opacity: 0; } }
+  .voz-estado { max-width: var(--ancho); margin: 0 auto; padding: 0 1rem; font-size: 0.85rem; color: var(--magenta-hover); min-height: 0; }
+  .voz-estado:empty { display: none; }
+  .ayuda { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; align-items: center; }
+  .ayuda label { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--tinta); cursor: pointer; }
   .boton-enviar:disabled { background: #B9C1CC; cursor: not-allowed; }
   .ayuda { max-width: var(--ancho); margin: -0.35rem auto 0; padding: 0 1rem 0.6rem; font-size: 0.8rem; color: var(--tinta-suave); }
+  .sello .voz { font-weight: 700; color: var(--magenta-hover); }
 
   /* ---------- Formulario de reclamo ---------- */
   dialog {
@@ -363,10 +388,15 @@
     </div>
     <form id="form" autocomplete="off">
       <label class="visualmente-oculto" for="entrada">Tu consulta</label>
-      <textarea id="entrada" rows="1" maxlength="2000" placeholder="Ej.: ¿quedan gorras rojas?"></textarea>
+      <textarea id="entrada" rows="1" maxlength="2000" placeholder="Escribí o tocá el micrófono"></textarea>
+      <button class="boton-mic" id="btn-mic" type="button" aria-pressed="false" aria-label="Dictar la consulta" title="Dictar la consulta" hidden>
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="2.5" width="6" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.5 9.5a5.5 5.5 0 0 0 11 0M10 15v2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
       <button class="boton-enviar" id="btn-enviar" type="submit">Enviar</button>
     </form>
-    <p class="ayuda">Enter para enviar, Shift + Enter para una línea nueva.</p>
+    <p class="voz-estado" id="voz-estado" role="status" aria-live="polite"></p>
+    <p class="ayuda"><span id="ayuda-teclas">Enter para enviar, Shift + Enter para una línea nueva.</span>
+      <label id="ayuda-leer" hidden><input type="checkbox" id="leer"> Leer las respuestas en voz alta</label></p>
   </footer>
 
   <dialog id="dialogo-reclamo" aria-labelledby="titulo-reclamo">
@@ -503,6 +533,8 @@
   function setOcupado(v) {
     ocupado = v;
     btnEnviar.disabled = v;
+    const mic = document.querySelector("#btn-mic");
+    if (mic) mic.disabled = v;
     document.querySelectorAll(".etiqueta").forEach((b) => (b.disabled = v));
   }
   async function api(ruta, opciones = {}) {
@@ -518,24 +550,143 @@
   const conHora = (ruta) => { const h = horaElegida(); return h ? `${ruta}?hora=${encodeURIComponent(h)}` : ruta; };
 
   // ---------- conversación ----------
-  async function enviar(texto) {
+  async function enviar(texto, origen = "texto") {
     texto = texto.trim();
     if (!texto || ocupado) return;
     const hora = horaElegida() || horaReal();
     const usuario = agregarUsuario(texto, hora, fueraDeHorario(hora));
+    if (origen === "voz") marcarDictado(usuario, texto);
     setOcupado(true);
     const indicador = mostrarEscribiendo();
     try {
-      const r = await api("/api/chat", { method: "POST", body: JSON.stringify({ message: texto, hora: horaElegida() }) });
+      const r = await api("/api/chat", { method: "POST", body: JSON.stringify({ message: texto, hora: horaElegida(), origen }) });
       indicador.remove();
+      if (origen === "voz" && r.consulta && r.consulta !== texto) {
+        // Mostrar cómo quedó la consulta después de normalizar lo dictado.
+        usuario.querySelector(".burbuja").textContent = r.consulta;
+      }
       agregarBot(r.reply, r.hora);
+      if (origen === "voz" || leerRespuestas()) hablar(r.reply);
     } catch (e) {
       indicador.remove();
-      agregarError(e.message, () => { usuario.remove(); enviar(texto); });
+      agregarError(e.message, () => { usuario.remove(); enviar(texto, origen); });
     } finally {
       setOcupado(false);
       entrada.focus();
     }
+  }
+
+  // ---------- voz: dictado (reconocimiento) y lectura (síntesis) ----------
+  const Reconocimiento = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const sintesis = "speechSynthesis" in window ? window.speechSynthesis : null;
+  const btnMic = $("#btn-mic");
+  const vozEstado = $("#voz-estado");
+  let reconocedor = null;
+  let escuchando = false;
+
+  function marcarDictado(burbujaUsuario, original) {
+    const sello = burbujaUsuario.querySelector(".sello");
+    if (sello) sello.insertAdjacentHTML("beforeend", ', <span class="voz">dictado</span>');
+    burbujaUsuario.title = `Dictado: “${original}”`;
+  }
+  function leerRespuestas() { return $("#leer").checked; }
+
+  function vozEnEspanol() {
+    if (!sintesis) return null;
+    const voces = sintesis.getVoices();
+    const preferidas = ["es-AR", "es-419", "es-US", "es-MX", "es-ES"];
+    for (const lang of preferidas) {
+      const v = voces.find((x) => x.lang.replace("_", "-").toLowerCase() === lang.toLowerCase());
+      if (v) return v;
+    }
+    return voces.find((x) => x.lang.toLowerCase().startsWith("es")) || null;
+  }
+  function textoParaLeer(t) {
+    return t
+      .replace(/\*\*?([^*]+)\*\*?/g, "$1")      // sin marcas de negrita
+      .replace(/\s*[•·]\s*/g, ". ")                // viñetas como pausas
+      .replace(/\s+—\s+/g, ": ")
+      .replace(/\(([A-Z0-9-]{4,})\)/g, "")         // los SKU entre paréntesis no se leen
+      .replace(/\n+/g, ". ")
+      .replace(/(\.\s*){2,}/g, ". ")
+      .replace(/([:;,])\s*\.\s*/g, "$1 ")
+      .trim();
+  }
+  function hablar(t) {
+    if (!sintesis) return;
+    sintesis.cancel();
+    const u = new SpeechSynthesisUtterance(textoParaLeer(t));
+    u.lang = "es-AR";
+    const voz = vozEnEspanol();
+    if (voz) u.voice = voz;
+    u.rate = 1.05;
+    sintesis.speak(u);
+  }
+
+  function setEscuchando(v) {
+    escuchando = v;
+    btnMic.setAttribute("aria-pressed", String(v));
+    btnMic.setAttribute("aria-label", v ? "Dejar de escuchar" : "Dictar la consulta");
+    btnMic.title = btnMic.getAttribute("aria-label");
+    if (v) vozEstado.textContent = "Te escucho… cuando termines de hablar, se envía solo.";
+  }
+
+  function empezarDictado() {
+    if (ocupado) return;
+    sintesis?.cancel();
+    reconocedor = new Reconocimiento();
+    reconocedor.lang = "es-AR";
+    reconocedor.interimResults = true;
+    reconocedor.continuous = false;
+    reconocedor.maxAlternatives = 1;
+    let final = "";
+    reconocedor.onresult = (ev) => {
+      let parcial = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        if (r.isFinal) final += r[0].transcript; else parcial += r[0].transcript;
+      }
+      entrada.value = (final + parcial).trim();
+      ajustarAltura();
+    };
+    reconocedor.onerror = (ev) => {
+      const mensajes = {
+        "not-allowed": "No tengo permiso para usar el micrófono. Habilitalo en el candado de la barra de direcciones.",
+        "service-not-allowed": "El navegador no permite el dictado en esta página.",
+        "no-speech": "No escuché nada. Probá de nuevo, un poco más cerca del micrófono.",
+        "audio-capture": "No encontré un micrófono conectado.",
+        "network": "El dictado necesita conexión a internet en este navegador.",
+      };
+      vozEstado.textContent = mensajes[ev.error] || `No pude usar el micrófono (${ev.error}).`;
+      final = "";
+    };
+    reconocedor.onend = () => {
+      setEscuchando(false);
+      const texto = final.trim();
+      if (texto) {
+        vozEstado.textContent = "";
+        entrada.value = "";
+        ajustarAltura();
+        enviar(texto, "voz");
+      } else if (vozEstado.textContent.startsWith("Te escucho")) {
+        vozEstado.textContent = "";
+      }
+    };
+    setEscuchando(true);
+    reconocedor.start();
+  }
+
+  if (Reconocimiento) {
+    btnMic.hidden = false;
+    btnMic.addEventListener("click", () => (escuchando ? reconocedor?.stop() : empezarDictado()));
+  } else {
+    $("#ayuda-teclas").textContent = "Enter para enviar. Tu navegador no permite dictar: probá con Chrome o Edge.";
+  }
+  if (sintesis) {
+    $("#ayuda-leer").hidden = false;
+    $("#leer").checked = leer("merchbot-leer") === "1";
+    $("#leer").addEventListener("change", () => { guardar("merchbot-leer", $("#leer").checked ? "1" : "0"); if (!$("#leer").checked) sintesis.cancel(); });
+    sintesis.getVoices();   // algunos navegadores cargan las voces en diferido
   }
 
   // ---------- atajos sin IA ----------
