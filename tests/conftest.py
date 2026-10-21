@@ -41,6 +41,16 @@ def test_session_factory(test_engine):
 
 
 @pytest.fixture(autouse=True)
+def _limites_limpios():
+    """Cada test arranca sin intentos previos en los límites de uso."""
+    from merchbot.security import limites
+
+    limites.reiniciar()
+    yield
+    limites.reiniciar()
+
+
+@pytest.fixture(autouse=True)
 def _patch_db(monkeypatch, test_engine, test_session_factory):
     """Reemplaza el engine global por el de test para que get_session() lo use."""
     monkeypatch.setattr(db_module, "engine", test_engine)

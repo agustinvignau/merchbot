@@ -365,6 +365,7 @@
       </div>
       <button class="boton-texto" id="btn-actualizar" type="button" title="Volver a cargar el stock y los pedidos">Actualizar<span class="largo"> datos</span></button>
       <button class="boton-texto" id="btn-nueva" type="button" aria-label="Nueva conversación">Nueva<span class="largo"> conversación</span></button>
+      <button class="boton-texto" id="btn-salir" type="button" hidden>Salir</button>
     </div>
   </header>
   <div class="franja-horario" id="franja" hidden>
@@ -558,6 +559,7 @@
   }
   async function api(ruta, opciones = {}) {
     const r = await fetch(ruta, { headers: { "Content-Type": "application/json" }, credentials: "same-origin", ...opciones });
+    if (r.status === 401) { location.replace("/login"); throw new Error("Tu sesión venció. Ingresá de nuevo."); }
     const datos = await r.json().catch(() => ({}));
     if (!r.ok) {
       const d = datos.detail;
@@ -851,7 +853,20 @@
   });
 
   // ---------- arranque ----------
+  $("#btn-salir").addEventListener("click", async () => {
+    await fetch("/api/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
+    location.replace("/login");
+  });
+
   (async () => {
+    try {
+      const s = await api("/api/sesion");
+      if (s.usuario) {
+        const b = $("#btn-salir");
+        b.hidden = false;
+        b.textContent = `Salir (${s.usuario})`;
+      }
+    } catch (_) { /* sin sesión: el chat está abierto */ }
     restaurarHora();
     try { horario = await api("/api/horario"); } catch (_) { /* sin horario: no se muestra la franja */ }
     actualizarReloj();

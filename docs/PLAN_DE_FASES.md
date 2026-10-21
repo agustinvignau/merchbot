@@ -25,7 +25,7 @@ La entrega final es **presencial con defensa individual**: cada fase tiene que s
 | 4 | Voz ✅ | Hablarle al bot y que responda en voz | Originalidad (tema de la materia) | Hecha 20/10 |
 | 5 | RAG de políticas ✅ | Preguntas frecuentes y procedimientos con embeddings | Guiar al usuario en procedimientos | Hecha 20/10 |
 | 6 | Sentimiento y prioridad de reclamos ✅ | Clasificación con léxico propio y `transformers` | Capacidad de resolver problemas | Hecha 20/10 |
-| 7 | Evaluación y seguridad | Set de pruebas, login, rate limit web | Coherencia, confiabilidad | 18/11 |
+| 7 | Evaluación y seguridad ✅ | Set de pruebas, login, rate limit web | Coherencia, confiabilidad | Hecha 21/10 |
 | 8 | Deploy 24/7 y portfolio | VPS, HTTPS, capturas, reflexión final | Valor social 24/7, reflexión | 24/11 |
 
 Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance dentro de la fase, no se salta el criterio de "Hecho cuando".
@@ -196,7 +196,10 @@ Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance den
 
 ---
 
-## Fase 7 — Evaluación y seguridad
+## Fase 7 — Evaluación y seguridad ✅
+
+> **Hecha el 21/10.** Login del chat con usuarios del `.env` (hash pbkdf2, `merchbot hashear-clave`), sesión en cookie firmada con HMAC y vencimiento, conversación por usuario; límites por sesión (chat y reclamos) y por IP (ingreso al chat y al panel); cabeceras CSP, anti-iframe, nosniff, permissions-policy y sin caché en la API; IP real detrás de proxy solo desde proxies confiables; prompt reforzado contra inyección; `scripts/evaluar_bot.py` con 28 casos en 7 categorías; errores de Gemini explicados y `merchbot diagnostico`. 433 tests en verde.
+> Pendiente: correr la evaluación con la API key y guardar `docs/EVALUACION_BOT.md`.
 
 **Objetivo.** Que sea confiable y que se pueda poner en un VPS público sin riesgo.
 

@@ -3,7 +3,7 @@
 Acceso con la clave ADMIN_KEY del .env. Al ingresar se guarda una cookie
 HttpOnly derivada de la clave (HMAC); también se acepta el header X-Admin-Key
 para usar la API desde scripts. Sin ADMIN_KEY configurada el panel queda
-deshabilitado. El login con usuarios y el rate limit llegan en la Fase 7.
+deshabilitado. Los intentos de ingreso tienen un límite por IP.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from merchbot.config import settings
 from merchbot.core.metricas import calcular_metricas, cambiar_estado_reclamo, listar_reclamos
 from merchbot.core.registro import listar_interacciones
 from merchbot.data.models import ESTADOS_RECLAMO
+from merchbot.security import limites
 
 ADMIN_COOKIE = "merchbot_admin"
 ADMIN_MAX_AGE = 60 * 60 * 12  # 12 horas
@@ -64,11 +65,15 @@ def estado(request: Request) -> dict:
 
 
 @router.post("/login")
-def login(body: Login, response: Response) -> dict:
+def login(body: Login, request: Request, response: Response) -> dict:
     if not settings.admin_key:
         raise HTTPException(503, "El panel está deshabilitado: configurá ADMIN_KEY en el .env.")
+    ip = request.client.host if request.client else "desconocida"
+    if not limites.permitir(limites.limite_login(), ("admin", ip)):
+        raise HTTPException(429, "Demasiados intentos. Esperá unos minutos y probá de nuevo.")
     if not _clave_valida(body.clave):
         raise HTTPException(401, "La clave no es correcta.")
+    limites.limite_login().reset(("admin", ip))
     response.set_cookie(
         ADMIN_COOKIE, _token(), max_age=ADMIN_MAX_AGE, httponly=True, samesite="strict",
         secure=settings.app_env == "production", path="/",

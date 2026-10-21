@@ -41,8 +41,8 @@ Los datos de ejemplo son ficticios (`data/Stock_Merchandising_Demo.xlsx`).
 | ✅ | Voz: dictado, normalización y lectura en voz alta (Fase 4) | Hecho |
 | ✅ | RAG de políticas y procedimientos, con evaluación (Fase 5) | Hecho |
 | ✅ | Sentimiento y prioridad explicable de reclamos, con evaluación (Fase 6) | Hecho |
-| ✅ | 375 tests automatizados (Gemini mockeado) | Hecho |
-| 🚧 | Set de evaluación, login y rate limit web | Fase 7 |
+| ✅ | Login del chat, límites de uso, cabeceras de seguridad y set de evaluación del asistente (Fase 7) | Hecho |
+| ✅ | 433 tests automatizados (Gemini mockeado) | Hecho |
 | 🚧 | Deploy 24/7 en VPS | Fase 8 |
 
 Detalle de cada fase en [`docs/PLAN_DE_FASES.md`](docs/PLAN_DE_FASES.md).
@@ -99,6 +99,10 @@ En `/admin`, con la clave `ADMIN_KEY` del `.env`, se ve cómo se usa el asistent
 ![Panel de MerchBot con actividad de prueba](docs/img/panel.png)
 
 <sub>La captura usa actividad generada para la prueba, no consultas reales.</sub>
+
+## Seguridad y evaluación
+
+Con `CHAT_USUARIOS` en el `.env` el chat pide usuario y clave (hash pbkdf2, sesión firmada con HMAC); el panel usa `ADMIN_KEY`. Hay límite de consultas por minuto y de intentos de ingreso, cabeceras de seguridad (CSP, anti-iframe) y defensas contra la inyección de instrucciones. `scripts/evaluar_bot.py` mide al asistente con 28 casos: datos exactos, uso de las funciones correctas, temas fuera de alcance e intentos de manipularlo. Detalle en [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md).
 
 ## Arquitectura
 
@@ -201,6 +205,9 @@ python -m merchbot              # o simplemente: merchbot
 | `merchbot telegram` | Bot de Telegram |
 | `merchbot cargar-demo` | Carga la planilla de ejemplo en la base |
 | `merchbot indexar-politicas` | Vuelve a indexar `data/politicas.md` después de editarlo |
+| `merchbot diagnostico` | Prueba la API key, los modelos de chat (principal y respaldos) y los embeddings |
+| `merchbot hashear-clave` | Genera el hash de una clave para `CHAT_USUARIOS` |
+| `python scripts/evaluar_bot.py` | Evalúa las respuestas del asistente (28 casos) |
 | `python scripts/evaluar_sentimiento.py` | Compara léxico, VADER y RoBERTuito sobre reclamos etiquetados |
 | `python scripts/evaluar_rag.py` | Mide la recuperación del RAG (léxica y semántica) |
 | `python scripts/test_bot_interactive.py` | Conversar con el bot desde la terminal |
@@ -209,6 +216,8 @@ python -m merchbot              # o simplemente: merchbot
 ### Horario de atención
 
 Se configura en `.env`: `TIMEZONE`, `ATENCION_DESDE`, `ATENCION_HASTA` y `ATENCION_DIAS` (0 = lunes). Por defecto, lunes a viernes de 09:00 a 18:00, hora de Buenos Aires.
+
+**Modelos de respaldo.** Con `GEMINI_MODELOS_RESPALDO=modelo1,modelo2`, si el modelo principal se queda sin cuota (429) o fue dado de baja (404), la consulta sigue con el siguiente sin repetir las funciones ya ejecutadas. El modelo agotado queda en pausa el tiempo que indica la API y después se vuelve a usar. El reporte de `scripts/evaluar_bot.py` muestra qué modelo respondió cada caso.
 
 ### Datos reales con Google Sheets
 
@@ -254,7 +263,7 @@ Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear
 pytest
 ```
 
-375 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
+433 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
 
 ## Estructura
 
@@ -288,7 +297,9 @@ merchbot/
 │   │   ├── web/                 # app.py y admin.py (FastAPI), static/ (chat y panel)
 │   │   └── telegram/            # bot.py (handlers) y formatters.py
 │   └── security/
-│       └── rate_limiter.py      # anti-spam
+│       ├── auth.py              # usuarios, hash de claves, sesiones firmadas
+│       ├── limites.py           # límites de uso de la web
+│       └── rate_limiter.py      # ventana deslizante
 ├── tests/                       # espejo de src/merchbot (core, data, interfaces, security)
 ├── scripts/                     # REPL, prueba de sync y guion de diálogos de demo
 ├── data/                        # planilla de demo, políticas de ejemplo y sets de evaluación
@@ -298,6 +309,7 @@ merchbot/
 │   ├── RAG.md                   # diseño del RAG y evaluación
 │   ├── EVALUACION_RAG.md        # resultados de scripts/evaluar_rag.py
 │   ├── SENTIMIENTO.md           # sentimiento y prioridad de reclamos
+│   ├── SEGURIDAD.md             # acceso, límites, cabeceras, inyección y evaluación
 │   ├── EVALUACION_SENTIMIENTO.md  # resultados de scripts/evaluar_sentimiento.py
 │   ├── img/                     # capturas
 │   └── Propuesta_MerchBot.pdf
@@ -318,7 +330,8 @@ merchbot/
 
 ## Limitaciones actuales
 
-- **El chat todavía no tiene login** y el panel usa una sola clave compartida. Está pensado para correr en tu máquina; no lo expongas a internet hasta la Fase 7 (login y rate limit web).
+- Sin `CHAT_USUARIOS` el chat queda abierto (pensado para tu máquina). Antes de exponerlo, configurá usuarios, `SECRET_KEY` y HTTPS (Fase 8).
+- Los límites de uso viven en memoria: con varias réplicas del servidor habría que llevarlos a Redis.
 - Corre en una PC local, así que no es 24/7 real hasta la Fase 8.
 - La reducción de alucinaciones depende del prompt y de que los datos salgan de funciones; no es cero. La Fase 7 mide la tasa de aciertos con un set de evaluación.
 - Los datos de demo son ficticios; no hay datos de clientes reales en el repositorio.
