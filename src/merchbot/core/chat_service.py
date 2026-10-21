@@ -18,6 +18,7 @@ from merchbot.core import reports, tools
 from merchbot.core.assistant import MerchBot, UserId
 from merchbot.core.horario import resolver_momento
 from merchbot.core.memory import SqlConversationStore, Turno
+from merchbot.core.normalizacion import normalizar_dictado
 from merchbot.core.registro import clasificar, registrar_interaccion
 
 
@@ -49,6 +50,7 @@ class Atencion:
     hora: str
     fuera_de_horario: bool
     tipo: str
+    consulta: str = ""   # la consulta tal como la procesó el asistente (normalizada si fue dictada)
 
 
 class ChatService:
@@ -77,14 +79,20 @@ class ChatService:
         message: str,
         canal: str = "web",
         hora_simulada: Optional[str] = None,
+        origen: str = "texto",
     ) -> Atencion:
         """Procesa un mensaje en lenguaje natural y registra la interacción.
 
         `hora_simulada` ("03:20") hace que el asistente responda como si fuera
         esa hora; sin ella se usa la hora real. Lanza ValueError si la hora es inválida.
+        Con `origen="voz"` el texto dictado se normaliza antes ("talle ele" → "talle L").
         """
+        if origen not in ("texto", "voz"):
+            raise ValueError(f"Origen inválido: {origen!r}. Usá 'texto' o 'voz'.")
         momento = resolver_momento(hora_simulada)
         texto = (message or "").strip()
+        if origen == "voz":
+            texto = normalizar_dictado(texto)
         if not texto:
             return Atencion(MENSAJE_VACIO, momento.hora, momento.fuera_de_horario, "conversacion")
         if len(texto) > MAX_MESSAGE_LEN:
@@ -97,6 +105,7 @@ class ChatService:
             registrar_interaccion(
                 canal=canal, user_id=str(user_id), momento=momento, consulta=texto,
                 respuesta=None, herramientas=[], duracion_ms=_ms_desde(inicio), estado="error",
+                origen=origen,
             )
             raise
         duracion = _ms_desde(inicio)
@@ -105,9 +114,10 @@ class ChatService:
             canal=canal, user_id=str(user_id), momento=momento, consulta=texto,
             respuesta=respuesta.texto, herramientas=respuesta.herramientas,
             duracion_ms=duracion, estado="ok" if respuesta.completa else "error", tipo=tipo,
+            origen=origen,
         )
         logger.info("Consulta %s respondida user=%s en %d ms", tipo, user_id, duracion)
-        return Atencion(respuesta.texto, momento.hora, momento.fuera_de_horario, tipo)
+        return Atencion(respuesta.texto, momento.hora, momento.fuera_de_horario, tipo, consulta=texto)
 
     def ask(self, user_id: UserId, message: str, canal: str = "web",
             hora_simulada: Optional[str] = None) -> str:

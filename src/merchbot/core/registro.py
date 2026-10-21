@@ -40,6 +40,7 @@ def registrar_interaccion(
     duracion_ms: int,
     estado: str = "ok",
     tipo: Optional[str] = None,
+    origen: str = "texto",
 ) -> Optional[int]:
     """Guarda la interacción. Si falla, lo loguea y sigue: el registro nunca corta una respuesta."""
     try:
@@ -56,6 +57,7 @@ def registrar_interaccion(
                 herramientas=",".join(herramientas),
                 duracion_ms=duracion_ms,
                 estado=estado,
+                origen=origen,
             )
             session.add(fila)
             session.flush()

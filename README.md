@@ -38,8 +38,8 @@ Los datos de ejemplo son ficticios (`data/Stock_Merchandising_Demo.xlsx`).
 | ✅ | Interfaz web (FastAPI + HTML), memoria persistente, datos de demo y Docker (Fase 1) | Hecho |
 | ✅ | Registro de interacciones, hora simulada y reclamos (Fase 2) | Hecho |
 | ✅ | Panel admin con métricas y gestión de reclamos (Fase 3) | Hecho |
-| ✅ | 272 tests automatizados (Gemini mockeado) | Hecho |
-| 🚧 | Voz (reconocimiento y síntesis) | Fase 4 |
+| ✅ | Voz: dictado, normalización y lectura en voz alta (Fase 4) | Hecho |
+| ✅ | 314 tests automatizados (Gemini mockeado) | Hecho |
 | 🚧 | RAG de políticas y procedimientos | Fase 5 |
 | 🚧 | Sentimiento y prioridad de reclamos | Fase 6 |
 | 🚧 | Set de evaluación, login y rate limit web | Fase 7 |
@@ -74,6 +74,12 @@ Detalle de cada fase en [`docs/PLAN_DE_FASES.md`](docs/PLAN_DE_FASES.md).
 Las conversaciones de ejemplo se generan con `python scripts/demo_dialogos.py` y quedan en `docs/DIALOGOS_DEMO.md`.
 
 ![Reclamo registrado de madrugada desde el formulario](docs/img/web-reclamo.png)
+
+## Voz
+
+Se le puede hablar al asistente: el botón del micrófono dicta la consulta y la respuesta se lee en voz alta. Lo dictado pasa por una normalización antes del modelo ("doscientos buzos talle ele" se convierte en "200 buzos talle L"), y cada consulta queda registrada como escrita o dictada. Usa la Web Speech API del navegador, así que no tiene costo ni necesita un servidor de audio; el detalle, la relación con la materia, las limitaciones y la privacidad están en [`docs/VOZ.md`](docs/VOZ.md).
+
+![Consulta dictada a las 22:45: la burbuja muestra el texto normalizado y la marca "dictado"](docs/img/web-voz.png)
 
 ## Panel de métricas
 
@@ -130,7 +136,8 @@ Las líneas punteadas son partes planificadas.
 | Configuración | pydantic-settings |
 | Tests | pytest, pytest-asyncio, TestClient de FastAPI |
 | Deploy | Docker y docker compose |
-| Previsto | Web Speech API, embeddings de Gemini, `transformers` |
+| Voz | Web Speech API del navegador (reconocimiento y síntesis) |
+| Previsto | embeddings de Gemini, `transformers` |
 
 ## Funciones que el modelo puede llamar
 
@@ -196,7 +203,7 @@ Se configura en `.env`: `TIMEZONE`, `ATENCION_DESDE`, `ATENCION_HASTA` y `ATENCI
 
 | Método y ruta | Qué hace |
 |---|---|
-| `POST /api/chat` | Envía `{"message": "...", "hora": "03:20"}` (hora opcional) y devuelve la respuesta, la hora y si es fuera de horario |
+| `POST /api/chat` | Envía `{"message": "...", "hora": "03:20", "origen": "voz"}` (hora y origen opcionales) y devuelve la respuesta, la consulta procesada, la hora y si es fuera de horario |
 | `GET /api/historial` | Conversación guardada de esta sesión |
 | `DELETE /api/historial` | Empieza una conversación nueva |
 | `GET /api/comprar` | Productos para reponer (sin IA) |
@@ -230,7 +237,7 @@ Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear
 pytest
 ```
 
-272 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
+314 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
 
 ## Estructura
 
@@ -246,6 +253,7 @@ merchbot/
 │   │   ├── horario.py           # hora real o simulada, horario de atención
 │   │   ├── registro.py          # registro de interacciones
 │   │   ├── metricas.py          # métricas del panel
+│   │   ├── normalizacion.py     # números y talles dictados → forma de los datos
 │   │   ├── assistant.py         # MerchBot: Gemini + loop de function calling
 │   │   ├── tools.py             # funciones que llama el modelo (consultas SQL)
 │   │   └── reports.py           # reportes directos sin IA (/comprar, /resumen)
@@ -266,6 +274,7 @@ merchbot/
 ├── data/                        # plantilla de demo y script que la genera
 ├── docs/
 │   ├── PLAN_DE_FASES.md         # hoja de ruta detallada
+│   ├── VOZ.md                   # cómo funciona la voz, límites y privacidad
 │   ├── img/                     # capturas
 │   └── Propuesta_MerchBot.pdf
 ├── Dockerfile

@@ -151,6 +151,7 @@ class Interaccion(Base):
     herramientas = Column(Text, nullable=False, default="")           # separadas por coma
     duracion_ms = Column(Integer, nullable=False, default=0)
     estado = Column(String(8), nullable=False, default="ok")          # "ok" | "error"
+    origen = Column(String(8), nullable=True, default="texto")         # "texto" | "voz"
 
     def to_dict(self) -> dict:
         return {
@@ -167,6 +168,7 @@ class Interaccion(Base):
             "herramientas": [h for h in (self.herramientas or "").split(",") if h],
             "duracion_ms": self.duracion_ms,
             "estado": self.estado,
+            "origen": self.origen or "texto",
         }
 
 

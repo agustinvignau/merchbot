@@ -215,3 +215,17 @@ class TestReclamosWeb:
         assert i["user_id"].startswith("web:")
         assert i["hora_simulada"] == "04:00"
 
+
+class TestVozWeb:
+    def test_origen_voz_normaliza_y_devuelve_la_consulta(self, client):
+        r = client.post("/api/chat", json={"message": "treinta remeras talle eme", "origen": "voz"}).json()
+        assert r["consulta"] == "30 remeras talle M"
+        assert r["reply"] == "eco: 30 remeras talle M"
+
+    def test_por_defecto_es_texto(self, client):
+        r = client.post("/api/chat", json={"message": "talle ele"}).json()
+        assert r["consulta"] == "talle ele"
+
+    def test_origen_invalido_es_422(self, client):
+        assert client.post("/api/chat", json={"message": "hola", "origen": "otro"}).status_code == 422
+

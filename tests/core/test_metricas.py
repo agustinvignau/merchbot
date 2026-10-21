@@ -126,3 +126,14 @@ class TestFiltrosDeInteracciones:
         assert len(listar_interacciones(solo_errores=True)) == 1
         assert {i["tipo"] for i in listar_interacciones(tipo="pedidos")} == {"pedidos"}
         assert all(i["fuera_de_horario"] for i in listar_interacciones(solo_fuera_de_horario=True))
+
+
+def test_porcentaje_por_voz():
+    m = resolver_momento("10:00")
+    for origen in ("voz", "texto", "texto", "voz"):
+        registrar_interaccion(canal="web", user_id="u", momento=m, consulta="q", respuesta="r",
+                              herramientas=[], duracion_ms=1, origen=origen)
+    t = calcular_metricas()["totales"]
+    assert t["por_voz"] == 2 and t["porcentaje_por_voz"] == 50.0
+    assert calcular_metricas()["por_origen"] == {"texto": 2, "voz": 2}
+
