@@ -24,6 +24,8 @@ def _cabecera(interfaz: str) -> None:
     print(f"[merchbot] Interfaz: {interfaz}")
     print(f"[merchbot] Entorno: {settings.app_env}")
     print(f"[merchbot] Modelo Gemini: {settings.gemini_model}")
+    if settings.gemini_modelos_respaldo:
+        print(f"[merchbot] Respaldos: {settings.gemini_modelos_respaldo}")
     print(f"[merchbot] Base de datos: {settings.database_url}")
     print(f"[merchbot] Fuente de datos: {settings.fuente_de_datos}")
 
@@ -99,17 +101,25 @@ def _diagnostico(_: argparse.Namespace) -> int:
         for n in nombres:
             if "flash" in n or "pro" in n:
                 print(f"     - {n}")
-        if settings.gemini_model not in nombres:
-            print(f"\n[!]  '{settings.gemini_model}' no aparece en la lista: elegí uno de arriba y ponelo en GEMINI_MODEL.")
     except Exception as e:  # noqa: BLE001
         print(f"[X] No pude listar modelos: {describir_error(e).mensaje}\n    Detalle: {e}")
         return 1
-    try:
-        r = cliente.models.generate_content(model=settings.gemini_model, contents="Respondé solo: OK")
-        print(f"\n[OK] El modelo de chat responde: {(r.text or '').strip()[:40]}")
-    except Exception as e:  # noqa: BLE001
-        ok = False
-        print(f"\n[X] El modelo de chat falla: {describir_error(e).mensaje}\n    Detalle: {e}")
+    from merchbot.core.modelos import modelos_configurados
+
+    modelos = modelos_configurados()
+    for i, modelo in enumerate(modelos):
+        rol = "principal" if i == 0 else "respaldo"
+        if modelo not in nombres:
+            print(f"\n[!]  '{modelo}' ({rol}) no aparece en la lista de modelos disponibles.")
+        try:
+            r = cliente.models.generate_content(model=modelo, contents="Respondé solo: OK")
+            print(f"[OK] {modelo} ({rol}) responde: {(r.text or '').strip()[:40]}")
+        except Exception as e:  # noqa: BLE001
+            ok = ok and i > 0
+            print(f"[X]  {modelo} ({rol}) falla: {describir_error(e).mensaje}\n     Detalle: {str(e)[:300]}")
+    if len(modelos) == 1:
+        print("\nTip: sumá GEMINI_MODELOS_RESPALDO=modelo1,modelo2 en el .env para que, si este se queda\n"
+              "sin cuota, MerchBot siga con otro (por ejemplo un flash-lite de la lista de arriba).")
     try:
         cliente.models.embed_content(model=settings.embedding_model, contents=["prueba"])
         print("[OK] Los embeddings funcionan (RAG semántico).")

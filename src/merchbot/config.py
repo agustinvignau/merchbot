@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # --- Gemini ---
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
+    # Modelos de respaldo, separados por coma: si el principal se queda sin cuota
+    # (429) o fue dado de baja (404), la consulta sigue con el siguiente.
+    gemini_modelos_respaldo: str = ""
 
     # --- Telegram ---
     telegram_bot_token: str = ""

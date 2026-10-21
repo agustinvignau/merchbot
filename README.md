@@ -205,7 +205,7 @@ python -m merchbot              # o simplemente: merchbot
 | `merchbot telegram` | Bot de Telegram |
 | `merchbot cargar-demo` | Carga la planilla de ejemplo en la base |
 | `merchbot indexar-politicas` | Vuelve a indexar `data/politicas.md` después de editarlo |
-| `merchbot diagnostico` | Prueba la API key, el modelo de chat y los embeddings |
+| `merchbot diagnostico` | Prueba la API key, los modelos de chat (principal y respaldos) y los embeddings |
 | `merchbot hashear-clave` | Genera el hash de una clave para `CHAT_USUARIOS` |
 | `python scripts/evaluar_bot.py` | Evalúa las respuestas del asistente (28 casos) |
 | `python scripts/evaluar_sentimiento.py` | Compara léxico, VADER y RoBERTuito sobre reclamos etiquetados |
@@ -216,6 +216,8 @@ python -m merchbot              # o simplemente: merchbot
 ### Horario de atención
 
 Se configura en `.env`: `TIMEZONE`, `ATENCION_DESDE`, `ATENCION_HASTA` y `ATENCION_DIAS` (0 = lunes). Por defecto, lunes a viernes de 09:00 a 18:00, hora de Buenos Aires.
+
+**Modelos de respaldo.** Con `GEMINI_MODELOS_RESPALDO=modelo1,modelo2`, si el modelo principal se queda sin cuota (429) o fue dado de baja (404), la consulta sigue con el siguiente sin repetir las funciones ya ejecutadas. El modelo agotado queda en pausa el tiempo que indica la API y después se vuelve a usar. El panel de evaluación registra qué modelo respondió cada caso.
 
 ### Datos reales con Google Sheets
 

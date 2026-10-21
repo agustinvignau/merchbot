@@ -188,7 +188,7 @@ def correr(service, casos: list[Caso], pausa: float = 0.0, reintentos: int = 3) 
         inicio = time.perf_counter()
         try:
             r = _responder_con_reintentos(service, caso, reintentos)
-            texto, herramientas = r.texto, r.herramientas
+            texto, herramientas, modelo = r.texto, r.herramientas, r.modelo
             fallas = evaluar_caso(caso, texto, herramientas) + verificar_extra(caso)
         except CuotaDiariaAgotada:
             pendientes = ", ".join(c.id for c in casos[i:])
@@ -196,10 +196,11 @@ def correr(service, casos: list[Caso], pausa: float = 0.0, reintentos: int = 3) 
             print(f"Mañana seguí desde ahí con: --desde {caso.id}  (o probá otro GEMINI_MODEL)")
             break
         except Exception as e:  # noqa: BLE001
-            texto, herramientas, fallas = "", [], [f"error: {type(e).__name__}: {e}"]
+            texto, herramientas, modelo, fallas = "", [], "", [f"error: {type(e).__name__}: {e}"]
         resultados.append({"caso": caso, "texto": texto, "herramientas": herramientas, "fallas": fallas,
+                           "modelo": modelo,
                            "ms": int((time.perf_counter() - inicio) * 1000)})
-        print(f"{'OK ' if not fallas else 'MAL'} {caso.id:10} {'; '.join(fallas)[:110]}")
+        print(f"{'OK ' if not fallas else 'MAL'} {caso.id:10} {modelo[:24]:24} {'; '.join(fallas)[:100]}")
         if pausa and i < len(casos) - 1:
             time.sleep(pausa)
     return resultados
@@ -221,6 +222,9 @@ def resumen(resultados: list[dict]) -> dict[str, tuple[int, int]]:
 
 def a_markdown(resultados: list[dict], modelo: str) -> str:
     total = sum(1 for r in resultados if not r["fallas"])
+    usados = sorted({r.get("modelo") for r in resultados if r.get("modelo")})
+    if usados and usados != [modelo]:
+        modelo = f"{modelo}`; respondieron: `{', '.join(usados)}"
     lineas = [
         "# Evaluación del asistente", "",
         f"Generado con `python scripts/evaluar_bot.py`, modelo `{modelo}`, datos de demo. "
@@ -229,11 +233,11 @@ def a_markdown(resultados: list[dict], modelo: str) -> str:
     ]
     for cat, (ok, n) in resumen(resultados).items():
         lineas.append(f"| {cat} | {ok}/{n} |")
-    lineas += ["", "## Detalle", "", "| Caso | Pregunta | Funciones | Resultado |", "|---|---|---|---|"]
+    lineas += ["", "## Detalle", "", "| Caso | Pregunta | Funciones | Modelo | Resultado |", "|---|---|---|---|---|"]
     for r in resultados:
         c = r["caso"]
         estado = "✅" if not r["fallas"] else "❌ " + "; ".join(r["fallas"]).replace("|", "/")
-        lineas.append(f"| {c.id} | {c.pregunta} | {', '.join(r['herramientas']) or '—'} | {estado} |")
+        lineas.append(f"| {c.id} | {c.pregunta} | {', '.join(r['herramientas']) or '—'} | {r.get('modelo') or '—'} | {estado} |")
     lineas += ["", "## Respuestas", ""]
     for r in resultados:
         lineas += [f"**{r['caso'].id}**: {r['caso'].pregunta}", "", "> " + (r["texto"] or "(sin respuesta)").replace("\n", "\n> "), ""]
