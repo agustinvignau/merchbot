@@ -26,7 +26,7 @@ La entrega final es **presencial con defensa individual**: cada fase tiene que s
 | 5 | RAG de políticas ✅ | Preguntas frecuentes y procedimientos con embeddings | Guiar al usuario en procedimientos | Hecha 20/10 |
 | 6 | Sentimiento y prioridad de reclamos ✅ | Clasificación con léxico propio y `transformers` | Capacidad de resolver problemas | Hecha 20/10 |
 | 7 | Evaluación y seguridad ✅ | Set de pruebas, login, rate limit web | Coherencia, confiabilidad | Hecha 21/10 |
-| 8 | Deploy 24/7 y portfolio | VPS, HTTPS, capturas, reflexión final | Valor social 24/7, reflexión | 24/11 |
+| 8 | Cierre del TP ✅ | Reflexión final; deploy queda como trabajo futuro | Valor social 24/7, reflexión | Hecha 21/10 |
 
 Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance dentro de la fase, no se salta el criterio de "Hecho cuando".
 
@@ -217,22 +217,15 @@ Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance den
 
 ---
 
-## Fase 8 — Deploy 24/7 y portfolio
+## Fase 8 — Cierre del TP ✅
 
-**Objetivo.** Dejarlo corriendo de verdad y presentable.
+> **Hecha el 21/10.** Se decidió cerrar con lo que ya está armado y cumplir la consigna: PRs #1 a #8 juntados en `main` y reflexión final en [`REFLEXION.md`](REFLEXION.md), con la tabla de qué pide la consigna y cómo se cumple.
 
-**Qué se hace**
-- VPS con `docker compose`, Caddy (o nginx) para HTTPS, reinicio automático y backups de la base.
-- GitHub Actions: tests en cada push.
-- README final con capturas, GIF de la demo y diagrama de arquitectura (ya hay una primera versión en el README).
-- **Reflexión final del TP** (cómo la tecnología mejora la calidad de vida y el acceso a la información) y justificación del valor social de la atención 24/7.
-- Guion de defensa: qué hace cada módulo y por qué se tomó cada decisión.
-- Publicación en el portfolio (agustinvignau.com) con enlace a la demo.
-
-**Hecho cuando**
-- La demo pública responde a cualquier hora.
-- El repo se clona, se configura el `.env` y levanta con un comando.
-- Podés explicar cada decisión técnica sin mirar el código.
+**Trabajo futuro (no entra en el TP)**
+- Deploy 24/7 en un VPS: `docker compose` + Caddy para HTTPS + backups. El Dockerfile y el compose ya están listos.
+- GitHub Actions con los tests en cada push.
+- README con capturas reales y GIF de la demo (las actuales usan un asistente simulado).
+- Uso como asistente de consulta interno conectado al ERP de una empresa.
 
 ---
 

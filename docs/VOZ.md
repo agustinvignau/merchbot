@@ -57,7 +57,7 @@ En la web, la burbuja del usuario muestra la consulta ya normalizada y la marca 
 - **Dónde se procesa el audio.** La Web Speech API no garantiza que el reconocimiento sea local. En Chrome y Edge el audio se envía a los servidores del proveedor del navegador para transcribirlo; en Safari se usa el servicio de Apple. MerchBot nunca recibe ni guarda audio: solo le llega el texto. Conviene aclararlo si se usa con datos reales.
 - **Navegadores.** El dictado funciona en Chrome, Edge y Safari. Firefox no tiene `SpeechRecognition`: en ese caso el botón del micrófono no aparece y la web lo avisa. La lectura en voz alta funciona en todos los navegadores modernos.
 - **Conexión.** En Chrome el dictado necesita internet.
-- **Permiso del micrófono.** El navegador lo pide la primera vez. Si se niega, la web explica cómo habilitarlo. Fuera de `localhost`, los navegadores solo dan acceso al micrófono en páginas con HTTPS (lo resuelve el deploy de la Fase 8).
+- **Permiso del micrófono.** El navegador lo pide la primera vez. Si se niega, la web explica cómo habilitarlo. Fuera de `localhost`, los navegadores solo dan acceso al micrófono en páginas con HTTPS (habría que resolverlo al subirlo a un servidor).
 - **Calidad.** Depende del micrófono, el ruido y el acento. Nombres propios de clientes o modelos raros pueden transcribirse mal; la normalización no corrige esos casos.
 - **Telegram.** Las notas de voz de Telegram no se procesan todavía.
 

@@ -42,8 +42,10 @@ Los datos de ejemplo son ficticios (`data/Stock_Merchandising_Demo.xlsx`).
 | ✅ | RAG de políticas y procedimientos, con evaluación (Fase 5) | Hecho |
 | ✅ | Sentimiento y prioridad explicable de reclamos, con evaluación (Fase 6) | Hecho |
 | ✅ | Login del chat, límites de uso, cabeceras de seguridad y set de evaluación del asistente (Fase 7) | Hecho |
-| ✅ | 433 tests automatizados (Gemini mockeado) | Hecho |
-| 🚧 | Deploy 24/7 en VPS | Fase 8 |
+| ✅ | Modelos de respaldo si Gemini se queda sin cuota | Hecho |
+| ✅ | 447 tests automatizados (Gemini mockeado) | Hecho |
+| ✅ | Reflexión final del TP (Fase 8) | Hecho |
+| ⏭️ | Deploy 24/7 en VPS | Trabajo futuro |
 
 Detalle de cada fase en [`docs/PLAN_DE_FASES.md`](docs/PLAN_DE_FASES.md).
 
@@ -263,7 +265,7 @@ Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear
 pytest
 ```
 
-433 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
+447 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
 
 ## Estructura
 
@@ -330,9 +332,9 @@ merchbot/
 
 ## Limitaciones actuales
 
-- Sin `CHAT_USUARIOS` el chat queda abierto (pensado para tu máquina). Antes de exponerlo, configurá usuarios, `SECRET_KEY` y HTTPS (Fase 8).
+- Sin `CHAT_USUARIOS` el chat queda abierto (pensado para tu máquina). Antes de exponerlo, configurá usuarios, `SECRET_KEY` y HTTPS.
 - Los límites de uso viven en memoria: con varias réplicas del servidor habría que llevarlos a Redis.
-- Corre en una PC local, así que no es 24/7 real hasta la Fase 8.
+- Corre en una PC local, así que no es 24/7 real: el deploy en un servidor queda como trabajo futuro (Docker ya está listo).
 - La reducción de alucinaciones depende del prompt y de que los datos salgan de funciones; no es cero. La Fase 7 mide la tasa de aciertos con un set de evaluación.
 - Los datos de demo son ficticios; no hay datos de clientes reales en el repositorio.
 
@@ -340,7 +342,7 @@ merchbot/
 
 Trabajo final de *Técnicas de Procesamiento del Habla* — Tecnicatura Superior en Ciencia de Datos e Inteligencia Artificial, IFTS N°18. Consigna: un chatbot que simule atención 24/7 con al menos cuatro situaciones cotidianas, registro de interacciones o reclamos, simulación de atención a cualquier hora y una reflexión final sobre el valor de la atención continua.
 
-La reflexión final se publicará en `docs/REFLEXION.md` al cerrar la Fase 8.
+La reflexión final, con la tabla de cómo se cumple cada punto de la consigna, está en [`docs/REFLEXION.md`](docs/REFLEXION.md).
 
 ## Autor
 
