@@ -190,7 +190,11 @@ def correr(service, casos: list[Caso], pausa: float = 0.0, reintentos: int = 3) 
             r = _responder_con_reintentos(service, caso, reintentos)
             texto, herramientas, modelo = r.texto, r.herramientas, r.modelo
             fallas = evaluar_caso(caso, texto, herramientas) + verificar_extra(caso)
-        except CuotaDiariaAgotada:
+        except CuotaDiariaAgotada as e:
+            modelo_q = re.search(r"model['\"]?\s*:\s*['\"]([\w.\-]+)", str(e))
+            quota = re.search(r"quotaId['\"]?\s*:\s*['\"]([\w\-]+)", str(e))
+            print(f"\nÚltimo error: modelo {modelo_q.group(1) if modelo_q else '?'}, "
+                  f"cuota {quota.group(1) if quota else '?'}")
             pendientes = ", ".join(c.id for c in casos[i:])
             print(f"\nSe terminó la cuota DIARIA de Gemini. Quedaron sin correr: {pendientes}")
             print(f"Mañana seguí desde ahí con: --desde {caso.id}  (o probá otro GEMINI_MODEL)")
@@ -271,6 +275,9 @@ def main(argv=None) -> int:
     init_db()
     cargar_datos_demo()
     indexar()
+    from merchbot.core.modelos import modelos_configurados
+
+    print(f"Modelos (en orden): {', '.join(modelos_configurados())}\n")
     casos = [c for c in CASOS if not args.solo or c.categoria == args.solo]
     if args.desde:
         ids = [c.id for c in casos]
