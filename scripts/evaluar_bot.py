@@ -154,8 +154,9 @@ class CuotaDiariaAgotada(Exception):
 
 
 def _es_cuota(e: Exception) -> bool:
+    """Errores pasajeros: cuota (429) o modelo saturado (503). Vale la pena esperar."""
     texto = str(e)
-    return "429" in texto or "RESOURCE_EXHAUSTED" in texto
+    return any(x in texto for x in ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"))
 
 
 def _segundos_de_espera(e: Exception, por_defecto: float = 60.0) -> float:
@@ -178,7 +179,7 @@ def _responder_con_reintentos(service, caso: "Caso", reintentos: int):
             if intento == reintentos:
                 raise
             espera = _segundos_de_espera(e)
-            print(f"    cuota por minuto agotada, espero {espera:.0f} s y reintento {caso.id}...")
+            print(f"    todos los modelos ocupados o sin cuota por minuto, espero {espera:.0f} s y reintento {caso.id}...")
             time.sleep(espera)
 
 

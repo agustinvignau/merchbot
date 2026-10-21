@@ -6,10 +6,12 @@ comas. Cuando un modelo devuelve 429 (cuota) o 404 (modelo dado de baja), queda
 
 - cuota por minuto: la pausa es lo que sugiere la API en `retryDelay`;
 - cuota diaria: una hora (se vuelve a probar, por si ya se renovó);
+- modelo saturado (503, "high demand"): 30 segundos;
 - modelo inexistente: hasta reiniciar (24 h).
 
-Si todos están en pausa se prueba igual el que se libera antes, y si también
-falla, el error sube como siempre (el chat muestra el mensaje de cuota agotada).
+Si todos están en pausa se prueba igual el que se libera antes. Si fallan todos,
+sube el error más "pasajero" (saturación o cuota por minuto antes que cuota
+diaria), así quien llama sabe que vale la pena esperar y reintentar.
 """
 from __future__ import annotations
 
@@ -26,7 +28,10 @@ T = TypeVar("T")
 
 PAUSA_POR_DEFECTO = 60.0
 PAUSA_DIARIA = 3600.0
+PAUSA_SATURADO = 30.0
 PAUSA_MODELO_INEXISTENTE = 24 * 3600.0
+# Del más pasajero al más duradero: si fallan todos, sube el primero de esta lista.
+PRIORIDAD_ERROR = ("sobrecargado", "cuota_minuto", "cuota_diaria", "modelo_no_disponible")
 
 
 def modelos_configurados(principal: Optional[str] = None) -> list[str]:
@@ -40,11 +45,13 @@ def modelos_configurados(principal: Optional[str] = None) -> list[str]:
 
 
 def motivo_para_cambiar(exc: BaseException) -> Optional[str]:
-    """'cuota_minuto', 'cuota_diaria', 'modelo_no_disponible' o None si el error es de otro tipo."""
+    """'cuota_minuto', 'cuota_diaria', 'sobrecargado', 'modelo_no_disponible' o None si es otro error."""
     texto = f"{exc} {getattr(exc, 'status', '')}"
     codigo = getattr(exc, "code", None)
     if codigo == 429 or "RESOURCE_EXHAUSTED" in texto or " 429 " in f" {texto} ":
         return "cuota_diaria" if "PerDay" in texto else "cuota_minuto"
+    if codigo == 503 or "UNAVAILABLE" in texto or "high demand" in texto:
+        return "sobrecargado"
     if codigo == 404 or "NOT_FOUND" in texto or "no longer available" in texto:
         return "modelo_no_disponible"
     return None
@@ -55,6 +62,8 @@ def segundos_de_pausa(exc: BaseException, motivo: str) -> float:
         return PAUSA_MODELO_INEXISTENTE
     if motivo == "cuota_diaria":
         return PAUSA_DIARIA
+    if motivo == "sobrecargado":
+        return PAUSA_SATURADO
     m = re.search(r"retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?)s", str(exc))
     return float(m.group(1)) + 1 if m else PAUSA_POR_DEFECTO
 
@@ -82,7 +91,7 @@ class SelectorDeModelos:
 
     def ejecutar(self, llamada: Callable[[str], T]) -> tuple[T, str]:
         """Corre `llamada(modelo)` con el primero que funcione. Devuelve (resultado, modelo usado)."""
-        ultimo_error: Optional[BaseException] = None
+        errores: dict[str, BaseException] = {}
         for modelo in self.orden():
             try:
                 return llamada(modelo), modelo
@@ -93,6 +102,5 @@ class SelectorDeModelos:
                 pausa = segundos_de_pausa(e, motivo)
                 self.pausar(modelo, pausa)
                 logger.warning("Modelo %s: %s (pausa %.0f s). Pruebo el siguiente.", modelo, motivo, pausa)
-                ultimo_error = e
-        assert ultimo_error is not None
-        raise ultimo_error
+                errores.setdefault(motivo, e)
+        raise next(errores[m] for m in PRIORIDAD_ERROR if m in errores)

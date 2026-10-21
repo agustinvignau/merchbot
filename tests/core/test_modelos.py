@@ -91,3 +91,26 @@ def test_el_asistente_sigue_con_el_respaldo_sin_repetir_funciones(monkeypatch, d
     usados = [c.kwargs["model"] for c in client.models.generate_content.call_args_list]
     assert usados == ["principal", "principal", "respaldo-lite"]
     assert tool.call_count == 1
+
+
+SATURADO = "503 UNAVAILABLE. {'message': 'This model is currently experiencing high demand.'}"
+
+
+def test_modelo_saturado_pasa_al_siguiente():
+    assert mod.motivo_para_cambiar(Exception(SATURADO)) == "sobrecargado"
+    sel = mod.SelectorDeModelos(["a", "b"], reloj=Reloj())
+
+    def llamada(m):
+        if m == "a":
+            raise Exception(SATURADO)
+        return "ok"
+
+    assert sel.ejecutar(llamada) == ("ok", "b")
+
+
+def test_si_fallan_todos_sube_el_error_mas_pasajero():
+    """Principal sin cuota diaria, respaldo saturado: no hay que abortar como si fuera el día."""
+    sel = mod.SelectorDeModelos(["a", "b", "c"], reloj=Reloj())
+    errores = {"a": DIA, "b": SATURADO, "c": DIA}
+    with pytest.raises(Exception, match="503"):
+        sel.ejecutar(lambda m: (_ for _ in ()).throw(Exception(errores[m])))
