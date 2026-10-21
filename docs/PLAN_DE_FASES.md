@@ -21,7 +21,7 @@ La entrega final es **presencial con defensa individual**: cada fase tiene que s
 | 0 | Base saneada ✅ | Paquete `merchbot`, capa de servicio común, limpieza | — | Hecha 20/10 |
 | 1 | Interfaz web + Docker ✅ | Chat en el navegador, deploy local con un comando | Interfaz conversacional | Hecha 20/10 |
 | 2 | Registro, hora simulada y reclamos ✅ | Tabla de interacciones, selector de hora, `/reclamo` | Registro, cualquier hora, 4+ situaciones | Hecha 20/10 |
-| 3 | Panel admin con métricas | Dashboard de uso y reclamos | Realismo, valor demostrable | 30/10 (preentrega) |
+| 3 | Panel admin con métricas ✅ | Dashboard de uso y reclamos | Realismo, valor demostrable | Hecha 20/10 |
 | 4 | Voz | Hablarle al bot y que responda en voz | Originalidad (tema de la materia) | 05/11 |
 | 5 | RAG de políticas | Preguntas frecuentes y procedimientos con embeddings | Guiar al usuario en procedimientos | 11/11 |
 | 6 | Sentimiento y prioridad de reclamos | Clasificación con `transformers` | Capacidad de resolver problemas | 15/11 |
@@ -110,7 +110,9 @@ Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance den
 
 ---
 
-## Fase 3 — Panel admin con métricas
+## Fase 3 — Panel admin con métricas ✅
+
+> **Hecha el 20/10.** `/admin` con clave `ADMIN_KEY` (cookie HMAC, `X-Admin-Key` para scripts); cifras de consultas, % fuera de horario, mediana y p95 de respuesta, errores y reclamos abiertos; consultas por hora con la franja del horario de atención; tipos de consulta y funciones del modelo; reclamos con cambio de estado; registro filtrable. Gráficos en SVG propio, sin librerías. Las métricas se comparan contra SQL directo en los tests. 272 tests en verde.
 
 **Objetivo.** Mostrar lo que pasó con los datos: tu fuerte como analista y lo que más impresiona en una demo.
 

@@ -37,8 +37,8 @@ Los datos de ejemplo son ficticios (`data/Stock_Merchandising_Demo.xlsx`).
 | ✅ | Paquete instalable, capa común `ChatService` (Fase 0) | Hecho |
 | ✅ | Interfaz web (FastAPI + HTML), memoria persistente, datos de demo y Docker (Fase 1) | Hecho |
 | ✅ | Registro de interacciones, hora simulada y reclamos (Fase 2) | Hecho |
-| ✅ | 236 tests automatizados (Gemini mockeado) | Hecho |
-| 🚧 | Panel admin con métricas | Fase 3 |
+| ✅ | Panel admin con métricas y gestión de reclamos (Fase 3) | Hecho |
+| ✅ | 272 tests automatizados (Gemini mockeado) | Hecho |
 | 🚧 | Voz (reconocimiento y síntesis) | Fase 4 |
 | 🚧 | RAG de políticas y procedimientos | Fase 5 |
 | 🚧 | Sentimiento y prioridad de reclamos | Fase 6 |
@@ -75,6 +75,14 @@ Las conversaciones de ejemplo se generan con `python scripts/demo_dialogos.py` y
 
 ![Reclamo registrado de madrugada desde el formulario](docs/img/web-reclamo.png)
 
+## Panel de métricas
+
+En `/admin`, con la clave `ADMIN_KEY` del `.env`, se ve cómo se usa el asistente: cuántas consultas atendió, qué porcentaje llegó fuera del horario de atención, tiempo de respuesta (mediana y percentil 95), errores, consultas por hora del día, tipos de consulta y funciones que llamó el modelo. Desde ahí también se cambia el estado de los reclamos y se filtra el registro de interacciones. Todos los números salen de consultas a la base, y hay tests que los comparan contra SQL directo.
+
+![Panel de MerchBot con actividad de prueba](docs/img/panel.png)
+
+<sub>La captura usa actividad generada para la prueba, no consultas reales.</sub>
+
 ## Arquitectura
 
 ```mermaid
@@ -93,7 +101,7 @@ flowchart LR
     BOT <-->|function calling| TOOLS[tools.py<br/>consultas SQL]
     TOOLS --> DB
     BOT -.->|Fase 5| RAG[RAG de políticas<br/>embeddings]
-    LOG -.->|Fase 3| ADM[Panel admin]
+    LOG --> ADM[Panel admin<br/>/admin]
 ```
 
 Las líneas punteadas son partes planificadas.
@@ -198,6 +206,13 @@ Se configura en `.env`: `TIMEZONE`, `ATENCION_DESDE`, `ATENCION_HASTA` y `ATENCI
 | `GET /api/horario` | Hora real y horario de atención |
 | `POST /api/sync` | Vuelve a cargar los datos |
 | `GET /health` | Estado del servicio |
+| `POST /api/admin/login` | Ingreso al panel con `{"clave": "..."}` |
+| `GET /api/admin/metricas` | Métricas (`dias`, `todo`, `canal`) |
+| `GET /api/admin/interacciones` | Registro con filtros (`tipo`, `canal`, `fuera_de_horario`, `errores`) |
+| `GET /api/admin/reclamos` | Reclamos, opcionalmente por `estado` |
+| `PATCH /api/admin/reclamos/{numero}` | Cambia el estado (`abierto`, `en_revision`, `resuelto`) |
+
+Las rutas `/api/admin` piden la cookie del panel o el header `X-Admin-Key`.
 
 La documentación interactiva queda en <http://localhost:8000/docs>.
 
@@ -215,7 +230,7 @@ Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear
 pytest
 ```
 
-236 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
+272 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
 
 ## Estructura
 
@@ -230,6 +245,7 @@ merchbot/
 │   │   ├── memory.py            # memoria de conversación (RAM o base)
 │   │   ├── horario.py           # hora real o simulada, horario de atención
 │   │   ├── registro.py          # registro de interacciones
+│   │   ├── metricas.py          # métricas del panel
 │   │   ├── assistant.py         # MerchBot: Gemini + loop de function calling
 │   │   ├── tools.py             # funciones que llama el modelo (consultas SQL)
 │   │   └── reports.py           # reportes directos sin IA (/comprar, /resumen)
@@ -241,7 +257,7 @@ merchbot/
 │   │   ├── refresh.py           # elige la fuente según DATA_SOURCE
 │   │   └── scheduler.py         # sync periódico
 │   ├── interfaces/
-│   │   ├── web/                 # app.py (FastAPI) y static/index.html
+│   │   ├── web/                 # app.py y admin.py (FastAPI), static/ (chat y panel)
 │   │   └── telegram/            # bot.py (handlers) y formatters.py
 │   └── security/
 │       └── rate_limiter.py      # anti-spam
@@ -260,6 +276,7 @@ merchbot/
 
 ## Seguridad
 
+- **Panel:** protegido con `ADMIN_KEY`; sin clave queda deshabilitado. La cookie del panel es `HttpOnly` y `SameSite=Strict`, y es un HMAC de la clave, no la clave.
 - **Web:** cada navegador tiene su conversación, identificada por una cookie `HttpOnly` con un ID aleatorio. El servidor escucha solo en `localhost` por defecto, y en Docker el puerto se publica solo en `127.0.0.1`. Los errores internos no se muestran al usuario.
 - **Telegram:** acceso por whitelist de IDs y rate limit para usuarios no autorizados, con registro de cada intento denegado.
 - El bot no escribe en el Sheets ni modifica stock o pedidos.
@@ -268,7 +285,7 @@ merchbot/
 
 ## Limitaciones actuales
 
-- **La web todavía no tiene login.** Está pensada para correr en tu máquina; no la expongas a internet hasta la Fase 7 (login y rate limit web).
+- **El chat todavía no tiene login** y el panel usa una sola clave compartida. Está pensado para correr en tu máquina; no lo expongas a internet hasta la Fase 7 (login y rate limit web).
 - Corre en una PC local, así que no es 24/7 real hasta la Fase 8.
 - La reducción de alucinaciones depende del prompt y de que los datos salgan de funciones; no es cero. La Fase 7 mide la tasa de aciertos con un set de evaluación.
 - Los datos de demo son ficticios; no hay datos de clientes reales en el repositorio.
