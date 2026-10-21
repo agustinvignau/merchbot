@@ -4,7 +4,7 @@
 
 > Proyecto de portfolio y trabajo final de *Técnicas de Procesamiento del Habla* (Tecnicatura en Ciencia de Datos e IA, IFTS N°18). Nació como un bot de Telegram y hoy tiene interfaz web; está evolucionando a un asistente disponible 24/7, con voz, RAG y panel de métricas.
 
-![Chat web de MerchBot con la lista de productos para reponer](docs/img/web-comprar.png)
+![Chat web de MerchBot a las 03:20: el depósito está cerrado y el asistente responde igual](docs/img/web-24-7.png)
 
 ## Demo
 
@@ -36,8 +36,8 @@ Los datos de ejemplo son ficticios (`data/Stock_Merchandising_Demo.xlsx`).
 | ✅ | Sincronización periódica desde Google Sheets | Hecho |
 | ✅ | Paquete instalable, capa común `ChatService` (Fase 0) | Hecho |
 | ✅ | Interfaz web (FastAPI + HTML), memoria persistente, datos de demo y Docker (Fase 1) | Hecho |
-| ✅ | 162 tests automatizados (Gemini mockeado) | Hecho |
-| 🚧 | Registro de interacciones, hora simulada y reclamos | Fase 2 |
+| ✅ | Registro de interacciones, hora simulada y reclamos (Fase 2) | Hecho |
+| ✅ | 236 tests automatizados (Gemini mockeado) | Hecho |
 | 🚧 | Panel admin con métricas | Fase 3 |
 | 🚧 | Voz (reconocimiento y síntesis) | Fase 4 |
 | 🚧 | RAG de políticas y procedimientos | Fase 5 |
@@ -50,11 +50,30 @@ Detalle de cada fase en [`docs/PLAN_DE_FASES.md`](docs/PLAN_DE_FASES.md).
 ## Por qué está hecho así
 
 - **El modelo no inventa números.** No se le pasa el catálogo en el prompt: Gemini decide qué función llamar (`buscar_stock`, `obtener_pedidos_de_cliente`, …), el código la ejecuta contra la base y el resultado vuelve al modelo, que arma la respuesta. Escala a miles de SKUs sin tocar el prompt.
-- **Solo lectura sobre el negocio.** El bot no modifica stock ni pedidos. La fuente de verdad sigue siendo la planilla que ya usa la empresa.
+- **Solo lectura sobre el negocio.** El bot no modifica stock ni pedidos; lo único que escribe son reclamos y el registro de interacciones. La fuente de verdad sigue siendo la planilla que ya usa la empresa.
+- **El contexto lo pone el código, no el modelo.** Al registrar un reclamo, el canal, el usuario y la hora los completa el sistema; si el modelo intenta mandarlos, se descartan.
 - **Sin migrar el sistema de nadie.** Sincroniza desde un Google Sheets compartido por el endpoint público de exportación: no necesita OAuth ni cuenta de Google Cloud.
 - **Cada capa se puede reemplazar.** Todas las interfaces hablan con `ChatService`, que valida el mensaje y delega en el asistente. La web y Telegram son capas finas por encima; cambiar de modelo no toca las interfaces.
 - **Se prueba sin nada externo.** Con `DATA_SOURCE=demo` carga una planilla de ejemplo, sin Google Sheets. Los atajos (qué comprar, resumen) no usan IA y responden aunque Gemini no esté disponible.
 - **RAG solo donde corresponde (Fase 5).** El stock es dato estructurado y se consulta con SQL. Los embeddings se reservan para texto libre (políticas, preguntas frecuentes).
+
+## Situaciones que atiende
+
+| Situación | Ejemplo | Cómo la resuelve |
+|---|---|---|
+| Consulta de stock | "¿Cuántas remeras negras talle M tengo?" | `buscar_stock` sobre la base |
+| Pedidos de un cliente | "¿Qué pidió Coca-Cola?" | `obtener_pedidos_de_cliente` |
+| Reposición | "¿Qué hay que comprar?", "¿me alcanzan 200 buzos grises L?" | `listar_productos_a_comprar` y `buscar_stock` encadenadas |
+| Reclamos | "Me llegaron remeras manchadas" y "¿cómo va el reclamo 1?" | `registrar_reclamo` y `consultar_estado_reclamo`, o el formulario |
+| Resumen del inventario | "¿Cómo estamos?" | `obtener_resumen_ejecutivo` |
+
+**Atención a cualquier hora.** En la web se elige la hora de la consulta (mañana, tarde, noche, madrugada u otra). El asistente sabe si el depósito está abierto: fuera del horario de atención responde igual y avisa que lo que necesite una persona (por ejemplo, un reclamo) queda para el próximo día hábil. Cada mensaje muestra su hora.
+
+**Registro.** Cada consulta queda en la tabla `interacciones` con canal, hora, tipo de consulta, funciones usadas, duración y si hubo error. Los reclamos van a la tabla `reclamos` con un número para seguirlos.
+
+Las conversaciones de ejemplo se generan con `python scripts/demo_dialogos.py` y quedan en `docs/DIALOGOS_DEMO.md`.
+
+![Reclamo registrado de madrugada desde el formulario](docs/img/web-reclamo.png)
 
 ## Arquitectura
 
@@ -69,10 +88,11 @@ flowchart LR
     CS --> BOT[MerchBot<br/>Gemini 2.5 Flash]
     BOT <--> MEM[(memoria de<br/>conversación)]
     MEM --> DB
+    CS --> LOG[(interacciones<br/>y reclamos)]
+    LOG --> DB
     BOT <-->|function calling| TOOLS[tools.py<br/>consultas SQL]
     TOOLS --> DB
     BOT -.->|Fase 5| RAG[RAG de políticas<br/>embeddings]
-    CS -.->|Fase 2| LOG[(interacciones<br/>reclamos)]
     LOG -.->|Fase 3| ADM[Panel admin]
 ```
 
@@ -82,10 +102,11 @@ Las líneas punteadas son partes planificadas.
 
 1. El usuario escribe en la web (o en Telegram).
 2. La web identifica la conversación con una cookie de sesión; Telegram verifica la whitelist y el rate limit.
-3. `ChatService.ask()` valida el mensaje (vacío, largo máximo) y lo pasa al asistente.
+3. `ChatService` valida el mensaje (vacío, largo máximo), resuelve la hora de la consulta (real o simulada) y lo pasa al asistente.
 4. `MerchBot.ask()` envía la consulta a Gemini junto con las funciones disponibles y los últimos turnos guardados en la base.
 5. Gemini pide ejecutar una o varias funciones; el código las corre contra la base.
 6. Gemini redacta la respuesta con esos resultados y se devuelve al usuario.
+7. `ChatService` registra la interacción: tipo de consulta, funciones usadas, hora y duración.
 
 ## Stack
 
@@ -113,6 +134,8 @@ Las líneas punteadas son partes planificadas.
 | `listar_pedidos_recientes` | Últimos N pedidos |
 | `obtener_resumen_ejecutivo` | Métricas agregadas de stock y pedidos |
 | `listar_categorias_disponibles` | Catálogo disponible |
+| `registrar_reclamo` | Registra un reclamo y devuelve su número |
+| `consultar_estado_reclamo` | Estado de un reclamo por número |
 
 ## Cómo correrlo
 
@@ -151,6 +174,10 @@ python -m merchbot              # o simplemente: merchbot
 | `python scripts/test_bot_interactive.py` | Conversar con el bot desde la terminal |
 | `python scripts/test_sync.py` | Probar la sincronización con Google Sheets |
 
+### Horario de atención
+
+Se configura en `.env`: `TIMEZONE`, `ATENCION_DESDE`, `ATENCION_HASTA` y `ATENCION_DIAS` (0 = lunes). Por defecto, lunes a viernes de 09:00 a 18:00, hora de Buenos Aires.
+
 ### Datos reales con Google Sheets
 
 1. Subí `data/Stock_Merchandising_Demo.xlsx` a Google Drive y abrilo como Hojas de cálculo (o copiá su estructura: hojas `Stock` y `Pedidos`).
@@ -161,11 +188,14 @@ python -m merchbot              # o simplemente: merchbot
 
 | Método y ruta | Qué hace |
 |---|---|
-| `POST /api/chat` | Envía `{"message": "..."}` y devuelve `{"reply": "..."}` |
+| `POST /api/chat` | Envía `{"message": "...", "hora": "03:20"}` (hora opcional) y devuelve la respuesta, la hora y si es fuera de horario |
 | `GET /api/historial` | Conversación guardada de esta sesión |
 | `DELETE /api/historial` | Empieza una conversación nueva |
 | `GET /api/comprar` | Productos para reponer (sin IA) |
 | `GET /api/resumen` | Resumen del inventario (sin IA) |
+| `POST /api/reclamos` | Registra un reclamo desde el formulario |
+| `GET /api/reclamos/{numero}` | Estado de un reclamo |
+| `GET /api/horario` | Hora real y horario de atención |
 | `POST /api/sync` | Vuelve a cargar los datos |
 | `GET /health` | Estado del servicio |
 
@@ -177,7 +207,7 @@ La documentación interactiva queda en <http://localhost:8000/docs>.
 2. Arrancá con `merchbot telegram` (o `docker compose --profile telegram up -d`).
 3. Escribile `/whoami`, copiá tu ID a `TELEGRAM_ALLOWED_USER_IDS` y reiniciá. **Sin whitelist, cualquiera que encuentre el bot puede ver el stock y los clientes.**
 
-Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear`.
+Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear`, `/reclamo <qué pasó>`.
 
 ## Tests
 
@@ -185,7 +215,7 @@ Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear
 pytest
 ```
 
-162 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
+236 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
 
 ## Estructura
 
@@ -198,11 +228,13 @@ merchbot/
 │   ├── core/
 │   │   ├── chat_service.py      # puerta de entrada común a todas las interfaces
 │   │   ├── memory.py            # memoria de conversación (RAM o base)
+│   │   ├── horario.py           # hora real o simulada, horario de atención
+│   │   ├── registro.py          # registro de interacciones
 │   │   ├── assistant.py         # MerchBot: Gemini + loop de function calling
 │   │   ├── tools.py             # funciones que llama el modelo (consultas SQL)
 │   │   └── reports.py           # reportes directos sin IA (/comprar, /resumen)
 │   ├── data/
-│   │   ├── models.py            # StockItem, Pedido, Mensaje
+│   │   ├── models.py            # StockItem, Pedido, Mensaje, Interaccion, Reclamo
 │   │   ├── database.py          # engine y sesiones SQLAlchemy
 │   │   ├── sheets_sync.py       # lectura del Sheets y upsert
 │   │   ├── demo_seed.py         # carga de la planilla de demo
@@ -214,7 +246,7 @@ merchbot/
 │   └── security/
 │       └── rate_limiter.py      # anti-spam
 ├── tests/                       # espejo de src/merchbot (core, data, interfaces, security)
-├── scripts/                     # prueba de sync y REPL del bot
+├── scripts/                     # REPL, prueba de sync y guion de diálogos de demo
 ├── data/                        # plantilla de demo y script que la genera
 ├── docs/
 │   ├── PLAN_DE_FASES.md         # hoja de ruta detallada

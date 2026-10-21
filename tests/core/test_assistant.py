@@ -292,3 +292,58 @@ class TestAskNoInyectaCatalogo:
         # El config debe incluir tools (no None ni lista vacía)
         assert call_kwargs["config"].tools is not None
         assert len(call_kwargs["config"].tools) > 0
+
+
+# ---------------------------------------------------------------------------
+# responder(): hora de la consulta, herramientas usadas y reclamos
+# ---------------------------------------------------------------------------
+
+class TestResponder:
+    def test_informa_al_modelo_la_hora_simulada(self, db_with_data):
+        from merchbot.core.horario import resolver_momento
+
+        bot, client = _bot_con_responses([_mock_response_with_text("ok")])
+        bot.responder(1, "hola", momento=resolver_momento("03:20"))
+        config = client.models.generate_content.call_args.kwargs["config"]
+        assert "03:20" in config.system_instruction
+        assert "FUERA del horario" in config.system_instruction
+
+    def test_devuelve_las_herramientas_usadas(self, db_with_data):
+        bot, _ = _bot_con_responses([
+            _mock_response_with_calls(_mock_fc("buscar_stock", {"color": "Negro"})),
+            _mock_response_with_calls(_mock_fc("listar_productos_a_comprar", {})),
+            _mock_response_with_text("listo"),
+        ])
+        r = bot.responder(1, "negros y qué comprar")
+        assert r.texto == "listo"
+        assert r.herramientas == ["buscar_stock", "listar_productos_a_comprar"]
+        assert r.completa
+
+    def test_guarda_la_hora_en_la_memoria(self, db_with_data):
+        from merchbot.core.horario import resolver_momento
+
+        bot, _ = _bot_con_responses([_mock_response_with_text("ok")])
+        bot.responder(5, "hola", momento=resolver_momento("22:45"))
+        assert {t.hora for t in bot.memoria.history(5)} == {"22:45"}
+
+    def test_el_reclamo_recibe_canal_usuario_y_hora(self, db_with_data):
+        from merchbot.core.horario import resolver_momento
+        from merchbot.core.tools import consultar_estado_reclamo
+
+        bot, _ = _bot_con_responses([
+            _mock_response_with_calls(_mock_fc("registrar_reclamo", {
+                "descripcion": "Llegaron remeras manchadas", "tipo": "producto_defectuoso",
+                "_contexto": {"canal": "hackeado"},   # el modelo no puede pisar el contexto
+            })),
+            _mock_response_with_text("Registré el reclamo #1."),
+        ])
+        bot.responder("web:abc", "llegaron remeras manchadas",
+                      momento=resolver_momento("01:15"), canal="web")
+        reclamo = consultar_estado_reclamo(1)
+        assert reclamo["canal"] == "web"
+        assert reclamo["hora"] == "01:15"
+        assert reclamo["tipo"] == "producto_defectuoso"
+
+    def test_respaldo_marca_respuesta_incompleta(self, db_with_data):
+        bot, _ = _bot_con_responses([_mock_response_with_text("")])
+        assert bot.responder(1, "???").completa is False

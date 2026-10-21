@@ -1,7 +1,7 @@
 """Conexión y sesiones de base de datos."""
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, Session
 
 from merchbot.config import settings
@@ -28,8 +28,31 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def init_db() -> None:
-    """Crea las tablas si no existen."""
+    """Crea las tablas que falten y agrega columnas nuevas a las existentes."""
     Base.metadata.create_all(bind=engine)
+    _agregar_columnas_faltantes()
+
+
+def _agregar_columnas_faltantes() -> None:
+    """Migración liviana: agrega columnas nuevas (nullables) a tablas ya creadas.
+
+    `create_all` no modifica tablas existentes. Para un proyecto de este tamaño
+    alcanza con esto en vez de Alembic: solo agrega columnas que aceptan NULL o
+    tienen default, nunca borra ni cambia tipos.
+    """
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for tabla in Base.metadata.sorted_tables:
+            if not inspector.has_table(tabla.name):
+                continue
+            existentes = {c["name"] for c in inspector.get_columns(tabla.name)}
+            for columna in tabla.columns:
+                if columna.name in existentes:
+                    continue
+                if not columna.nullable and columna.default is None:
+                    continue  # no se puede agregar sin valor; requiere migración manual
+                tipo = columna.type.compile(dialect=engine.dialect)
+                conn.execute(text(f'ALTER TABLE "{tabla.name}" ADD COLUMN "{columna.name}" {tipo}'))
 
 
 @contextmanager

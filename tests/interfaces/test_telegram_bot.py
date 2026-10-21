@@ -72,3 +72,41 @@ class TestAuthorization:
         self._set_whitelist(monkeypatch, "987654321")
         assert es_usuario_autorizado(987654321) is True
         assert es_usuario_autorizado(123456789) is False
+
+
+class TestCmdReclamo:
+    """/reclamo registra sin pasar por el modelo."""
+
+    def _update(self, user_id=111):
+        from unittest.mock import AsyncMock, MagicMock
+
+        update = MagicMock()
+        update.effective_user.id = user_id
+        update.message.reply_text = AsyncMock()
+        return update
+
+    def _correr(self, monkeypatch, args):
+        import asyncio
+        from unittest.mock import MagicMock
+
+        import merchbot.interfaces.telegram.bot as bot_module
+        from merchbot.core.chat_service import ChatService
+
+        monkeypatch.setattr(config_module.settings, "telegram_allowed_user_ids", "")
+        monkeypatch.setattr(bot_module, "_service", lambda: ChatService(assistant=MagicMock()))
+        update = self._update()
+        context = MagicMock(args=args)
+        asyncio.run(bot_module.cmd_reclamo(update, context))
+        return update.message.reply_text.call_args.args[0]
+
+    def test_registra_y_responde_el_numero(self, monkeypatch):
+        from merchbot.core.tools import consultar_estado_reclamo
+
+        texto = self._correr(monkeypatch, ["llegaron", "10", "gorras", "rotas"])
+        assert "Reclamo #1" in texto
+        reclamo = consultar_estado_reclamo(1)
+        assert reclamo["canal"] == "telegram"
+        assert reclamo["descripcion"] == "llegaron 10 gorras rotas"
+
+    def test_sin_descripcion_pide_detalle(self, monkeypatch):
+        assert "Contame qué pasó" in self._correr(monkeypatch, [])

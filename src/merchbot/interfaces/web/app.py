@@ -7,11 +7,17 @@ Endpoints:
     DELETE /api/historial  borra la conversación de la sesión
     GET    /api/comprar    productos a reponer (sin IA)
     GET    /api/resumen    resumen ejecutivo (sin IA)
+    POST   /api/reclamos   registra un reclamo desde el formulario (sin IA)
+    GET    /api/reclamos/{numero}  estado de un reclamo
+    GET    /api/horario    hora real y horario de atención
     POST   /api/sync       actualiza la base desde la fuente de datos
     GET    /health         estado del servicio
 
 Cada navegador tiene su propia conversación, identificada con una cookie de
 sesión (`merchbot_sid`). La lógica vive en ChatService, igual que en Telegram.
+
+Los endpoints que atienden al usuario aceptan una hora simulada ("HH:MM") para
+la demo de atención 24/7: el asistente responde como si fuera esa hora.
 """
 from __future__ import annotations
 
@@ -22,7 +28,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -30,6 +36,8 @@ from pydantic import BaseModel, Field
 from merchbot import __version__
 from merchbot.config import settings
 from merchbot.core.chat_service import MAX_MESSAGE_LEN, ChatService, get_chat_service
+from merchbot.core.horario import dias_habiles, resolver_momento, validar_hora
+from merchbot.data.models import TIPOS_RECLAMO
 
 
 logger = logging.getLogger(__name__)
@@ -44,17 +52,32 @@ _SID_VALIDO = re.compile(r"^[a-f0-9]{32}$")
 # Esquemas
 # ---------------------------------------------------------------------------
 
+HoraSimulada = Optional[str]
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., max_length=MAX_MESSAGE_LEN)
+    hora: HoraSimulada = Field(None, description="Hora simulada HH:MM; vacío = hora real")
 
 
 class ChatReply(BaseModel):
     reply: str
+    hora: str
+    fuera_de_horario: bool
+    tipo: str
 
 
 class Turno(BaseModel):
     role: str
     text: str
+    hora: Optional[str] = None
+
+
+class ReclamoRequest(BaseModel):
+    descripcion: str = Field(..., min_length=5, max_length=2000)
+    tipo: str = Field("otro", description=f"Uno de: {', '.join(TIPOS_RECLAMO)}")
+    cliente: Optional[str] = Field(None, max_length=160)
+    hora: HoraSimulada = None
 
 
 class Historial(BaseModel):
@@ -79,6 +102,14 @@ def _session_id(request: Request, response: Response) -> str:
             secure=settings.app_env == "production",
         )
     return f"web:{sid}"
+
+
+def _hora(valor: Optional[str]) -> Optional[str]:
+    """Valida la hora simulada; 422 si viene mal."""
+    try:
+        return validar_hora(valor)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -128,8 +159,10 @@ def create_app(
         sid: str = Depends(_session_id),
         svc: ChatService = Depends(service),
     ) -> ChatReply:
+        hora = _hora(body.hora)
         try:
-            return ChatReply(reply=svc.ask(sid, body.message))
+            a = svc.atender(sid, body.message, canal="web", hora_simulada=hora)
+            return ChatReply(reply=a.texto, hora=a.hora, fuera_de_horario=a.fuera_de_horario, tipo=a.tipo)
         except Exception:
             logger.exception("Error procesando mensaje de %s", sid)
             raise HTTPException(
@@ -143,7 +176,7 @@ def create_app(
         svc: ChatService = Depends(service),
     ) -> Historial:
         turnos = svc.history(sid)
-        return Historial(mensajes=[Turno(role=t.role, text=t.text) for t in turnos])
+        return Historial(mensajes=[Turno(role=t.role, text=t.text, hora=t.hora) for t in turnos])
 
     @app.delete("/api/historial")
     def borrar_historial(
@@ -153,19 +186,61 @@ def create_app(
         return {"borrados": svc.clear(sid)}
 
     @app.get("/api/comprar")
-    def comprar(svc: ChatService = Depends(service)) -> dict:
-        productos = svc.productos_a_comprar()
+    def comprar(
+        hora: Optional[str] = Query(None),
+        sid: str = Depends(_session_id),
+        svc: ChatService = Depends(service),
+    ) -> dict:
+        productos = svc.productos_a_comprar(sid, canal="web", hora_simulada=_hora(hora))
         return {"cantidad": len(productos), "productos": productos}
 
     @app.get("/api/resumen")
-    def resumen(svc: ChatService = Depends(service)) -> dict:
-        r = svc.resumen_ejecutivo()
+    def resumen(
+        hora: Optional[str] = Query(None),
+        sid: str = Depends(_session_id),
+        svc: ChatService = Depends(service),
+    ) -> dict:
+        r = svc.resumen_ejecutivo(sid, canal="web", hora_simulada=_hora(hora))
         # Las tuplas (nombre, unidades) se pasan a objetos para el frontend.
         for clave in ("top_cliente", "top_producto"):
             if r.get(clave):
                 nombre, unidades = r[clave]
                 r[clave] = {"nombre": nombre, "unidades": int(unidades)}
         return r
+
+    @app.post("/api/reclamos", status_code=201)
+    def crear_reclamo(
+        body: ReclamoRequest,
+        sid: str = Depends(_session_id),
+        svc: ChatService = Depends(service),
+    ) -> dict:
+        resultado = svc.registrar_reclamo(
+            sid, body.descripcion, body.tipo, body.cliente,
+            canal="web", hora_simulada=_hora(body.hora),
+        )
+        if not resultado.get("ok"):
+            raise HTTPException(status_code=422, detail=resultado.get("error", "Reclamo inválido."))
+        return resultado
+
+    @app.get("/api/reclamos/{numero}")
+    def ver_reclamo(numero: int, svc: ChatService = Depends(service)) -> dict:
+        resultado = svc.consultar_reclamo(numero)
+        if not resultado.get("encontrado"):
+            raise HTTPException(status_code=404, detail=f"No existe el reclamo #{numero}.")
+        return resultado
+
+    @app.get("/api/horario")
+    def horario() -> dict:
+        ahora = resolver_momento()
+        return {
+            "hora_actual": ahora.hora,
+            "dia": ahora.dia,
+            "dia_habil": ahora.dia_semana in dias_habiles(),
+            "fuera_de_horario": ahora.fuera_de_horario,
+            "atencion_desde": settings.atencion_desde,
+            "atencion_hasta": settings.atencion_hasta,
+            "zona_horaria": settings.timezone,
+        }
 
     @app.post("/api/sync")
     def sync() -> dict:

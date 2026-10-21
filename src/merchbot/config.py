@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     web_host: str = "127.0.0.1"
     web_port: int = 8000
 
+    # --- Horario de atención humana ---
+    # Fuera de este horario el asistente atiende igual y lo aclara; los reclamos
+    # quedan registrados para que una persona los vea el próximo día hábil.
+    timezone: str = "America/Argentina/Buenos_Aires"
+    atencion_desde: str = "09:00"
+    atencion_hasta: str = "18:00"
+    atencion_dias: str = "0,1,2,3,4"   # 0 = lunes ... 6 = domingo
+
     # --- App ---
     log_level: str = "INFO"
     app_env: str = "development"
