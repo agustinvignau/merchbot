@@ -203,3 +203,19 @@ class Reclamo(Base):
             "estado": self.estado,
         }
 
+
+class Fragmento(Base):
+    """Fragmento del documento de políticas, con su embedding (RAG)."""
+
+    __tablename__ = "fragmentos"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fuente = Column(String(120), nullable=False, index=True)   # nombre del archivo
+    seccion = Column(String(160), nullable=False)
+    orden = Column(Integer, nullable=False)
+    texto = Column(Text, nullable=False)
+    hash = Column(String(64), nullable=False, index=True)
+    modelo = Column(String(64), nullable=True)                 # modelo del embedding
+    vector = Column(Text, nullable=True)                       # JSON con el vector normalizado
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+

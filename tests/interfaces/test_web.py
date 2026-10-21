@@ -28,7 +28,8 @@ class AsistenteFalso:
         respuesta = f"eco: {query}"
         self.memoria.append(user_id, "user", query, hora=momento.hora)
         self.memoria.append(user_id, "model", respuesta, hora=momento.hora)
-        return Respuesta(respuesta, ["buscar_stock"])
+        fuentes = ["Guía de talles"] if "talle" in query else []
+        return Respuesta(respuesta, ["buscar_stock"], fuentes=fuentes)
 
     def clear_memory(self, user_id):
         return self.memoria.clear(user_id)
@@ -228,4 +229,9 @@ class TestVozWeb:
 
     def test_origen_invalido_es_422(self, client):
         assert client.post("/api/chat", json={"message": "hola", "origen": "otro"}).status_code == 422
+
+
+def test_la_respuesta_incluye_las_fuentes(client):
+    assert client.post("/api/chat", json={"message": "medidas del talle L"}).json()["fuentes"] == ["Guía de talles"]
+    assert client.post("/api/chat", json={"message": "hola"}).json()["fuentes"] == []
 

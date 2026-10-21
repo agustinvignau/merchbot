@@ -44,6 +44,7 @@ class Respuesta:
     texto: str
     herramientas: list[str] = field(default_factory=list)  # funciones que llamó el modelo
     completa: bool = True   # False si se cayó a un mensaje de respaldo
+    fuentes: list[str] = field(default_factory=list)   # secciones de políticas consultadas (RAG)
 
 
 # ---------------------------------------------------------------------------
@@ -68,11 +69,18 @@ GUÍA DE QUÉ HERRAMIENTA USAR:
 - El usuario cuenta un problema (prenda fallada, pedido demorado o equivocado, faltante) → registrar_reclamo.
   Si falta información clave (qué pasó), preguntala antes de registrar. Confirmá con el número de reclamo.
 - "¿cómo va mi reclamo 12?" → consultar_estado_reclamo(numero=12)
+- Preguntas de procedimientos y condiciones (plazos de entrega, pedido mínimo, cómo hacer un pedido,
+  cambios y devoluciones, guía de talles y medidas, envíos, formatos del logo, cuidado de prendas,
+  muestras, horarios) → consultar_politicas(pregunta="...").
+  Respondé SOLO con lo que dicen los fragmentos devueltos y nombrá la sección ("según Plazos de entrega...").
+  Si no devuelve fragmentos, decí que no tenés esa información y que lo puede consultar con el equipo.
+  Nunca inventes plazos, mínimos ni condiciones.
 
 PODÉS ENCADENAR HERRAMIENTAS si la pregunta lo amerita.
 Ej: "necesito 200 buzos grises L para Coca-Cola, ¿alcanzo?" →
     1. buscar_stock(producto="Buzo", color="Gris", talle="L")
     2. (si no alcanza) buscar_stock(producto="Buzo", color="Gris") para sugerir alternativas
+Ej: "¿cuánto tardan 150 remeras blancas M?" → buscar_stock(...) y consultar_politicas(pregunta="plazo de producción 150 unidades")
 
 REGLAS DE RESPUESTA:
 1. Respondés en español rioplatense, breve y operativo (sin saludos largos).
@@ -223,6 +231,24 @@ def _build_function_declarations() -> list[genai_types.FunctionDeclaration]:
                 "required": ["numero"],
             },
         ),
+        genai_types.FunctionDeclaration(
+            name="consultar_politicas",
+            description=(
+                "Busca en el documento de políticas de la empresa (plazos, pedido mínimo, cómo pedir, "
+                "cambios y devoluciones, talles, envíos, archivos de diseño, cuidado, muestras, horarios) "
+                "y devuelve los fragmentos más relevantes. Usala para cualquier pregunta de procedimientos."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "pregunta": {
+                        "type": "string",
+                        "description": "La pregunta del usuario, reformulada en forma completa si hace falta.",
+                    },
+                },
+                "required": ["pregunta"],
+            },
+        ),
     ]
 
 
@@ -329,6 +355,7 @@ class MerchBot:
         instrucciones = f"{SYSTEM_INSTRUCTION}\n{momento.contexto_para_el_modelo()}"
         contexto_tools = {"canal": canal, "user_id": str(user_id), "hora": momento.hora}
         herramientas: list[str] = []
+        fuentes: list[str] = []
 
         contents = self._build_initial_contents(user_id, query)
         had_tool_calls = False       # algún turno previo pidió tools
@@ -362,6 +389,10 @@ class MerchBot:
                     args = dict(fc.args) if fc.args else {}
                     herramientas.append(fc.name)
                     result = ejecutar_tool(fc.name, args, contexto_tools)
+                    if fc.name == "consultar_politicas" and isinstance(result, dict):
+                        for frag in result.get("fragmentos", []):
+                            if frag.get("seccion") and frag["seccion"] not in fuentes:
+                                fuentes.append(frag["seccion"])
                     # Loguear args + resumen del resultado para diagnóstico
                     resumen_result = (
                         f"keys={list(result.keys())[:4]}"
@@ -388,7 +419,7 @@ class MerchBot:
             if respuesta:
                 self.memoria.append(user_id, "user", query, hora=momento.hora)
                 self.memoria.append(user_id, "model", respuesta, hora=momento.hora)
-                return Respuesta(respuesta, herramientas)
+                return Respuesta(respuesta, herramientas, fuentes=fuentes)
 
             # ★ Texto VACÍO sin function calls.
             # Loguear con detalle para entender qué pasó (mejora B).

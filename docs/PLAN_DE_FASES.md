@@ -23,7 +23,7 @@ La entrega final es **presencial con defensa individual**: cada fase tiene que s
 | 2 | Registro, hora simulada y reclamos ✅ | Tabla de interacciones, selector de hora, `/reclamo` | Registro, cualquier hora, 4+ situaciones | Hecha 20/10 |
 | 3 | Panel admin con métricas ✅ | Dashboard de uso y reclamos | Realismo, valor demostrable | Hecha 20/10 |
 | 4 | Voz ✅ | Hablarle al bot y que responda en voz | Originalidad (tema de la materia) | Hecha 20/10 |
-| 5 | RAG de políticas | Preguntas frecuentes y procedimientos con embeddings | Guiar al usuario en procedimientos | 11/11 |
+| 5 | RAG de políticas ✅ | Preguntas frecuentes y procedimientos con embeddings | Guiar al usuario en procedimientos | Hecha 20/10 |
 | 6 | Sentimiento y prioridad de reclamos | Clasificación con `transformers` | Capacidad de resolver problemas | 15/11 |
 | 7 | Evaluación y seguridad | Set de pruebas, login, rate limit web | Coherencia, confiabilidad | 18/11 |
 | 8 | Deploy 24/7 y portfolio | VPS, HTTPS, capturas, reflexión final | Valor social 24/7, reflexión | 24/11 |
@@ -151,7 +151,10 @@ Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance den
 
 ---
 
-## Fase 5 — RAG de políticas
+## Fase 5 — RAG de políticas ✅
+
+> **Hecha el 20/10.** `data/politicas.md` (11 secciones ficticias); fragmentación por sección; tabla `fragmentos` con hash e indexación incremental; embeddings `gemini-embedding-001` (768 dimensiones, normalizados) y coseno con numpy; respaldo BM25 propio sin API key; función `consultar_politicas` con umbral y respuesta "no encontrado"; fuentes visibles en la web; `merchbot indexar-politicas`; `scripts/evaluar_rag.py` (25 preguntas, acierto@1/@3, MRR, rechazo). Léxica: 73 % / 95 % / 0,82 / 100 %. 348 tests en verde.
+> Pendiente: correr la evaluación con la API key para medir la búsqueda semántica y ajustar `RAG_MIN_SCORE` con esos números.
 
 **Objetivo.** Que el bot guíe en procedimientos y responda preguntas frecuentes con conocimiento en texto libre.
 

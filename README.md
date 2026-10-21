@@ -39,8 +39,8 @@ Los datos de ejemplo son ficticios (`data/Stock_Merchandising_Demo.xlsx`).
 | ✅ | Registro de interacciones, hora simulada y reclamos (Fase 2) | Hecho |
 | ✅ | Panel admin con métricas y gestión de reclamos (Fase 3) | Hecho |
 | ✅ | Voz: dictado, normalización y lectura en voz alta (Fase 4) | Hecho |
-| ✅ | 314 tests automatizados (Gemini mockeado) | Hecho |
-| 🚧 | RAG de políticas y procedimientos | Fase 5 |
+| ✅ | RAG de políticas y procedimientos, con evaluación (Fase 5) | Hecho |
+| ✅ | 348 tests automatizados (Gemini mockeado) | Hecho |
 | 🚧 | Sentimiento y prioridad de reclamos | Fase 6 |
 | 🚧 | Set de evaluación, login y rate limit web | Fase 7 |
 | 🚧 | Deploy 24/7 en VPS | Fase 8 |
@@ -55,7 +55,7 @@ Detalle de cada fase en [`docs/PLAN_DE_FASES.md`](docs/PLAN_DE_FASES.md).
 - **Sin migrar el sistema de nadie.** Sincroniza desde un Google Sheets compartido por el endpoint público de exportación: no necesita OAuth ni cuenta de Google Cloud.
 - **Cada capa se puede reemplazar.** Todas las interfaces hablan con `ChatService`, que valida el mensaje y delega en el asistente. La web y Telegram son capas finas por encima; cambiar de modelo no toca las interfaces.
 - **Se prueba sin nada externo.** Con `DATA_SOURCE=demo` carga una planilla de ejemplo, sin Google Sheets. Los atajos (qué comprar, resumen) no usan IA y responden aunque Gemini no esté disponible.
-- **RAG solo donde corresponde (Fase 5).** El stock es dato estructurado y se consulta con SQL. Los embeddings se reservan para texto libre (políticas, preguntas frecuentes).
+- **RAG solo donde corresponde.** El stock es dato estructurado y se consulta con SQL. Los embeddings se usan para texto libre: el documento de políticas (plazos, cambios, talles, envíos). Si no hay API key, la búsqueda pasa a BM25 y el asistente sigue andando.
 
 ## Situaciones que atiende
 
@@ -66,6 +66,7 @@ Detalle de cada fase en [`docs/PLAN_DE_FASES.md`](docs/PLAN_DE_FASES.md).
 | Reposición | "¿Qué hay que comprar?", "¿me alcanzan 200 buzos grises L?" | `listar_productos_a_comprar` y `buscar_stock` encadenadas |
 | Reclamos | "Me llegaron remeras manchadas" y "¿cómo va el reclamo 1?" | `registrar_reclamo` y `consultar_estado_reclamo`, o el formulario |
 | Resumen del inventario | "¿Cómo estamos?" | `obtener_resumen_ejecutivo` |
+| Procedimientos y condiciones | "¿Cuánto tarda un pedido de 150 remeras?", "¿me cambian prendas falladas?" | `consultar_politicas` (RAG sobre `data/politicas.md`) |
 
 **Atención a cualquier hora.** En la web se elige la hora de la consulta (mañana, tarde, noche, madrugada u otra). El asistente sabe si el depósito está abierto: fuera del horario de atención responde igual y avisa que lo que necesite una persona (por ejemplo, un reclamo) queda para el próximo día hábil. Cada mensaje muestra su hora.
 
@@ -74,6 +75,12 @@ Detalle de cada fase en [`docs/PLAN_DE_FASES.md`](docs/PLAN_DE_FASES.md).
 Las conversaciones de ejemplo se generan con `python scripts/demo_dialogos.py` y quedan en `docs/DIALOGOS_DEMO.md`.
 
 ![Reclamo registrado de madrugada desde el formulario](docs/img/web-reclamo.png)
+
+## Políticas con RAG
+
+Las preguntas de procedimientos (plazos, pedido mínimo, cambios, guía de talles, envíos, formato del logo) se responden con fragmentos de `data/politicas.md`, un documento de ejemplo. Se indexa con embeddings de Gemini y se busca por similitud de coseno; si no hay API key, con BM25. La respuesta nombra la sección en que se basa y, si las políticas no dicen nada, el asistente lo admite en vez de inventar. `scripts/evaluar_rag.py` mide qué tan bien encuentra la sección correcta. Detalle en [`docs/RAG.md`](docs/RAG.md).
+
+![Respuesta sobre plazos de entrega con la sección de las políticas en que se basa](docs/img/web-politicas.png)
 
 ## Voz
 
@@ -106,7 +113,8 @@ flowchart LR
     LOG --> DB
     BOT <-->|function calling| TOOLS[tools.py<br/>consultas SQL]
     TOOLS --> DB
-    BOT -.->|Fase 5| RAG[RAG de políticas<br/>embeddings]
+    BOT <-->|consultar_politicas| RAG[RAG de políticas<br/>embeddings + coseno]
+    RAG --> DB
     LOG --> ADM[Panel admin<br/>/admin]
 ```
 
@@ -137,7 +145,8 @@ Las líneas punteadas son partes planificadas.
 | Tests | pytest, pytest-asyncio, TestClient de FastAPI |
 | Deploy | Docker y docker compose |
 | Voz | Web Speech API del navegador (reconocimiento y síntesis) |
-| Previsto | embeddings de Gemini, `transformers` |
+| RAG | Embeddings de Gemini (`gemini-embedding-001`), numpy, BM25 propio de respaldo |
+| Previsto | `transformers` (sentimiento de reclamos) |
 
 ## Funciones que el modelo puede llamar
 
@@ -151,6 +160,7 @@ Las líneas punteadas son partes planificadas.
 | `listar_categorias_disponibles` | Catálogo disponible |
 | `registrar_reclamo` | Registra un reclamo y devuelve su número |
 | `consultar_estado_reclamo` | Estado de un reclamo por número |
+| `consultar_politicas` | Fragmentos de las políticas relevantes para una pregunta (RAG) |
 
 ## Cómo correrlo
 
@@ -186,6 +196,8 @@ python -m merchbot              # o simplemente: merchbot
 | `merchbot` o `merchbot web` | Interfaz web en <http://localhost:8000> (`--port` para cambiarlo) |
 | `merchbot telegram` | Bot de Telegram |
 | `merchbot cargar-demo` | Carga la planilla de ejemplo en la base |
+| `merchbot indexar-politicas` | Vuelve a indexar `data/politicas.md` después de editarlo |
+| `python scripts/evaluar_rag.py` | Mide la recuperación del RAG (léxica y semántica) |
 | `python scripts/test_bot_interactive.py` | Conversar con el bot desde la terminal |
 | `python scripts/test_sync.py` | Probar la sincronización con Google Sheets |
 
@@ -237,7 +249,7 @@ Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear
 pytest
 ```
 
-314 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
+348 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
 
 ## Estructura
 
@@ -254,11 +266,12 @@ merchbot/
 │   │   ├── registro.py          # registro de interacciones
 │   │   ├── metricas.py          # métricas del panel
 │   │   ├── normalizacion.py     # números y talles dictados → forma de los datos
+│   │   ├── rag/                 # fragmentos, embeddings, BM25 e índice de políticas
 │   │   ├── assistant.py         # MerchBot: Gemini + loop de function calling
 │   │   ├── tools.py             # funciones que llama el modelo (consultas SQL)
 │   │   └── reports.py           # reportes directos sin IA (/comprar, /resumen)
 │   ├── data/
-│   │   ├── models.py            # StockItem, Pedido, Mensaje, Interaccion, Reclamo
+│   │   ├── models.py            # StockItem, Pedido, Mensaje, Interaccion, Reclamo, Fragmento
 │   │   ├── database.py          # engine y sesiones SQLAlchemy
 │   │   ├── sheets_sync.py       # lectura del Sheets y upsert
 │   │   ├── demo_seed.py         # carga de la planilla de demo
@@ -271,10 +284,12 @@ merchbot/
 │       └── rate_limiter.py      # anti-spam
 ├── tests/                       # espejo de src/merchbot (core, data, interfaces, security)
 ├── scripts/                     # REPL, prueba de sync y guion de diálogos de demo
-├── data/                        # plantilla de demo y script que la genera
+├── data/                        # planilla de demo y políticas de ejemplo (politicas.md)
 ├── docs/
 │   ├── PLAN_DE_FASES.md         # hoja de ruta detallada
 │   ├── VOZ.md                   # cómo funciona la voz, límites y privacidad
+│   ├── RAG.md                   # diseño del RAG y evaluación
+│   ├── EVALUACION_RAG.md        # resultados de scripts/evaluar_rag.py
 │   ├── img/                     # capturas
 │   └── Propuesta_MerchBot.pdf
 ├── Dockerfile

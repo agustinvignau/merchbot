@@ -349,6 +349,27 @@ def consultar_estado_reclamo(numero: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Políticas (RAG)
+# ---------------------------------------------------------------------------
+
+def consultar_politicas(pregunta: str) -> dict:
+    """Fragmentos del documento de políticas relevantes para la pregunta."""
+    from merchbot.core.rag import buscar
+
+    resultados = buscar(pregunta)
+    if not resultados:
+        return {
+            "encontrado": False,
+            "mensaje": "Las políticas no dicen nada sobre esto. No inventes: sugerí consultarlo con el equipo.",
+        }
+    return {
+        "encontrado": True,
+        "metodo": resultados[0].metodo,
+        "fragmentos": [r.to_dict() for r in resultados],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Mapeo nombre -> función (para que el bot pueda ejecutar dinámicamente)
 # ---------------------------------------------------------------------------
 
@@ -360,6 +381,7 @@ TOOLS_MAP = {
     "obtener_resumen_ejecutivo": obtener_resumen_ejecutivo,
     "listar_categorias_disponibles": listar_categorias_disponibles,
     "registrar_reclamo": registrar_reclamo,
+    "consultar_politicas": consultar_politicas,
     "consultar_estado_reclamo": consultar_estado_reclamo,
 }
 
@@ -376,6 +398,7 @@ TIPO_POR_TOOL = {
     "obtener_resumen_ejecutivo": "resumen",
     "registrar_reclamo": "reclamo",
     "consultar_estado_reclamo": "reclamo",
+    "consultar_politicas": "politicas",
 }
 
 
