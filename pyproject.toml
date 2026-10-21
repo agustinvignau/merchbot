@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "merchbot"
+version = "0.2.0"
+description = "Asistente conversacional de stock para merchandising: Gemini + function calling sobre SQL."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Agustín Vignau" }]
+dependencies = [
+    "python-dotenv==1.0.1",
+    "google-genai>=0.8.0,<2.0",
+    "python-telegram-bot==21.6",
+    "sqlalchemy==2.0.35",
+    "requests==2.32.3",
+    "pydantic==2.9.2",
+    "pydantic-settings==2.5.2",
+    "APScheduler==3.10.4",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg2-binary==2.9.9"]
+dev = ["pytest==8.3.3", "pytest-asyncio==0.24.0"]
+
+[project.scripts]
+merchbot = "merchbot.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-ra --strict-markers"
+markers = ["integration: tests que tocan APIs externas (skip por default)"]

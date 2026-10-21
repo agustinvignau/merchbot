@@ -18,19 +18,19 @@ from __future__ import annotations
 import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 from google import genai
 from google.genai import types as genai_types
-from sqlalchemy import func
 
-from src.config import settings
-from src.database import get_session
-from src.models import StockItem, Pedido
-from src.tools import ejecutar_tool
+from merchbot.config import settings
+from merchbot.core.tools import ejecutar_tool
 
 
 logger = logging.getLogger(__name__)
+
+# Identificador de usuario: int en Telegram, str (id de sesión) en la web.
+UserId = Union[int, str]
 
 
 # ---------------------------------------------------------------------------
@@ -187,58 +187,6 @@ class Turno:
 
 
 # ---------------------------------------------------------------------------
-# Formateadores para los comandos atajo del bot Telegram
-# (estos NO usan IA, leen directo de la DB)
-# ---------------------------------------------------------------------------
-
-def format_comprar_message(productos: list[dict]) -> str:
-    """Mensaje legible para el comando /comprar."""
-    if not productos:
-        return "✅ Stock OK, no hay nada para comprar."
-    total_faltante = sum(abs(p["stock_actual"]) for p in productos if p["stock_actual"] < 0)
-    lineas = [f"⚠️ {len(productos)} producto(s) por comprar:\n"]
-    for p in productos:
-        falta = abs(p["stock_actual"]) if p["stock_actual"] < 0 else 0
-        sufijo = f" → faltan {falta}" if falta > 0 else ""
-        lineas.append(
-            f"• {p['descripcion']} ({p['sku']})\n"
-            f"   stock actual: {p['stock_actual']}{sufijo}"
-        )
-    if total_faltante > 0:
-        lineas.append(f"\n📦 Total a comprar: {total_faltante} unidades")
-    return "\n".join(lineas)
-
-
-def format_resumen_message(r: dict) -> str:
-    """Mensaje legible para el comando /resumen."""
-    lineas = [
-        "📊 *Resumen ejecutivo*\n",
-        f"• Total SKUs en stock: *{r['total_skus']}*",
-        f"• SKUs en verde (OK): *{r['skus_ok']}*",
-        f"• SKUs en rojo (comprar): *{r['skus_comprar']}*",
-        f"• Unidades totales en stock: *{r['unidades_totales']:,}*".replace(",", "."),
-        "",
-        f"📦 *Pedidos*",
-        f"• Pedidos cargados: *{r['total_pedidos']}*",
-        f"• Unidades vendidas: *{r['unidades_vendidas']:,}*".replace(",", "."),
-        f"• Clientes distintos: *{r['clientes_distintos']}*",
-    ]
-    if r['top_cliente']:
-        cliente, cantidad = r['top_cliente']
-        lineas.append(
-            f"• Top cliente: *{cliente}* "
-            f"({cantidad:,} unidades)".replace(",", ".")
-        )
-    if r['top_producto']:
-        producto, cantidad = r['top_producto']
-        lineas.append(
-            f"• Producto más pedido: *{producto}* "
-            f"({cantidad:,} unidades)".replace(",", ".")
-        )
-    return "\n".join(lineas)
-
-
-# ---------------------------------------------------------------------------
 # MerchBot
 # ---------------------------------------------------------------------------
 
@@ -264,81 +212,14 @@ class MerchBot:
     ) -> None:
         self.modelo = modelo or settings.gemini_model
         self.client = genai.Client(api_key=api_key or settings.gemini_api_key)
-        self._memoria: dict[int, deque[Turno]] = defaultdict(
+        self._memoria: dict[UserId, deque[Turno]] = defaultdict(
             lambda: deque(maxlen=self.HISTORIAL_MAX_TURNOS)
         )
-
-    # ---- Comandos atajo del bot Telegram (no usan IA) --------------------
-
-    def get_productos_a_comprar(self) -> list[dict]:
-        """Productos con estado COMPRAR. Ordenados por urgencia."""
-        with get_session() as session:
-            items = (
-                session.query(StockItem)
-                .filter(StockItem.estado == "COMPRAR")
-                .order_by(StockItem.stock_actual.asc())
-                .all()
-            )
-            return [it.to_dict() for it in items]
-
-    def get_resumen_ejecutivo(self) -> dict:
-        """Métricas agregadas para el comando /resumen."""
-        with get_session() as session:
-            total_skus = session.query(StockItem).count()
-            skus_comprar = (
-                session.query(StockItem)
-                .filter(StockItem.estado == "COMPRAR")
-                .count()
-            )
-            skus_ok = total_skus - skus_comprar
-            unidades_totales = (
-                session.query(func.sum(StockItem.stock_actual))
-                .filter(StockItem.stock_actual > 0)
-                .scalar() or 0
-            )
-            total_pedidos = session.query(Pedido).count()
-            unidades_vendidas = session.query(func.sum(Pedido.cantidad)).scalar() or 0
-            clientes_distintos = session.query(Pedido.cliente).distinct().count()
-
-            top_cliente_row = (
-                session.query(Pedido.cliente, func.sum(Pedido.cantidad).label("total"))
-                .group_by(Pedido.cliente)
-                .order_by(func.sum(Pedido.cantidad).desc())
-                .first()
-            )
-            top_cliente = (
-                (top_cliente_row.cliente, top_cliente_row.total)
-                if top_cliente_row else None
-            )
-
-            top_sku_row = (
-                session.query(Pedido.sku, Pedido.producto,
-                              func.sum(Pedido.cantidad).label("total"))
-                .group_by(Pedido.sku, Pedido.producto)
-                .order_by(func.sum(Pedido.cantidad).desc())
-                .first()
-            )
-            top_producto = (
-                (top_sku_row.producto or top_sku_row.sku, top_sku_row.total)
-                if top_sku_row else None
-            )
-
-        return {
-            "total_skus": total_skus,
-            "skus_ok": skus_ok,
-            "skus_comprar": skus_comprar,
-            "unidades_totales": int(unidades_totales),
-            "total_pedidos": total_pedidos,
-            "unidades_vendidas": int(unidades_vendidas),
-            "clientes_distintos": clientes_distintos,
-            "top_cliente": top_cliente,
-            "top_producto": top_producto,
-        }
 
     # ---- Conversación con Gemini + function calling ----------------------
 
     def _build_initial_contents(
-        self, user_id: int, query: str
+        self, user_id: UserId, query: str
     ) -> list[genai_types.Content]:
         """Arma el historial conversacional + nueva pregunta."""
         contenidos: list[genai_types.Content] = []
@@ -365,7 +246,7 @@ class MerchBot:
         except (AttributeError, IndexError):
             return "?"
 
-    def ask(self, user_id: int, query: str) -> str:
+    def ask(self, user_id: UserId, query: str) -> str:
         """Pregunta principal con loop de function calling.
 
         Flujo:
@@ -477,7 +358,7 @@ class MerchBot:
         return ("Tu consulta requirió más pasos de los esperados. "
                 "Probá dividirla en preguntas más simples.")
 
-    def clear_memory(self, user_id: int) -> int:
+    def clear_memory(self, user_id: UserId) -> int:
         n = len(self._memoria.get(user_id, []))
         self._memoria.pop(user_id, None)
         return n

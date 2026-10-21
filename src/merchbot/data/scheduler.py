@@ -13,8 +13,8 @@ import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from src.config import settings
-from src.sheets_sync import sync_from_sheets
+from merchbot.config import settings
+from merchbot.data.sheets_sync import sync_from_sheets
 
 
 logger = logging.getLogger(__name__)
@@ -51,10 +51,10 @@ def start_scheduler() -> BackgroundScheduler:
     interval_min = settings.sync_interval_min
     if interval_min <= 0:
         logger.info("SYNC_INTERVAL_MIN=0 → sync automático desactivado, solo /sync manual.")
-        _scheduler = BackgroundScheduler()  # vacío, no programa nada
+        _scheduler = BackgroundScheduler(timezone="UTC")  # vacío, no programa nada
         return _scheduler
 
-    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler = BackgroundScheduler(daemon=True, timezone="UTC")
     _scheduler.add_job(
         _do_sync,
         trigger="interval",

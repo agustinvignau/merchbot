@@ -16,10 +16,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import func
 
-from src.database import get_session
-from src.models import StockItem, Pedido
+from merchbot.data.database import get_session
+from merchbot.data.models import StockItem, Pedido
 
 
 # ---------------------------------------------------------------------------

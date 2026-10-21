@@ -21,9 +21,10 @@ from typing import Iterable, Optional
 
 import requests
 
-from src.config import settings
-from src.database import get_session
-from src.models import StockItem, Pedido
+from merchbot.config import settings
+from merchbot.timeutils import utc_now
+from merchbot.data.database import get_session
+from merchbot.data.models import StockItem, Pedido
 
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ class SyncResult:
 
     def __post_init__(self):
         if self.timestamp is None:
-            self.timestamp = datetime.utcnow()
+            self.timestamp = utc_now()
 
     def resumen(self) -> str:
         """Mensaje legible para el bot."""
@@ -226,7 +227,7 @@ def sync_from_sheets(
     if not sheet_id:
         return SyncResult(ok=False, error="SHEETS_ID no configurado en .env")
 
-    now = datetime.utcnow()
+    now = utc_now()
     try:
         # Stock
         stock_csv = fetch_sheet_as_csv(sheet_id, stock_tab)

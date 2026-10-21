@@ -3,8 +3,8 @@ from datetime import date
 
 import pytest
 
-from src.models import StockItem, Pedido
-from src.tools import (
+from merchbot.data.models import StockItem, Pedido
+from merchbot.core.tools import (
     buscar_stock,
     listar_productos_a_comprar,
     obtener_pedidos_de_cliente,

@@ -7,14 +7,14 @@ Flujo de arranque:
 4. Arranca el bot de Telegram (long-polling).
 
 Uso:
-    python -m src.main
+    python -m merchbot          (o, instalado: merchbot)
 """
 import logging
 
-from src.config import settings
-from src.database import init_db
-from src.scheduler import start_scheduler, stop_scheduler
-from src.telegram_bot import run as run_telegram_bot
+from merchbot.config import settings
+from merchbot.data.database import init_db
+from merchbot.data.scheduler import start_scheduler, stop_scheduler
+from merchbot.interfaces.telegram.bot import run as run_telegram_bot
 
 
 def main() -> None:
@@ -23,13 +23,13 @@ def main() -> None:
     print(f"[main] Base de datos: {settings.database_url}")
     print(f"[main] Sheets ID: {settings.sheets_id}")
     print(f"[main] Sync cada: {settings.sync_interval_min} min")
-    print(f"[main] Inicializando esquema de DB...")
+    print("[main] Inicializando esquema de DB...")
     init_db()
 
-    print(f"[main] Arrancando scheduler de sync...")
+    print("[main] Arrancando scheduler de sync...")
     start_scheduler()
 
-    print(f"[main] Listo. Arrancando bot de Telegram...\n")
+    print("[main] Listo. Arrancando bot de Telegram...\n")
     try:
         run_telegram_bot()
     finally:
