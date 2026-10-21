@@ -100,7 +100,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _consola_utf8() -> None:
+    """La consola de Windows usa cp1252 por defecto: sin esto, cualquier log con
+    tildes raras, flechas o emojis tira 'UnicodeEncodeError' / 'Logging error'."""
+    for flujo in (sys.stdout, sys.stderr):
+        try:
+            flujo.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _consola_utf8()
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.comando is None:  # sin subcomando → web

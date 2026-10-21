@@ -50,11 +50,11 @@ def start_scheduler() -> BackgroundScheduler:
 
     interval_min = settings.sync_interval_min
     if settings.fuente_de_datos == "demo":
-        logger.info("DATA_SOURCE=demo → datos de la planilla de ejemplo, sin sync periódico.")
+        logger.info("DATA_SOURCE=demo: datos de la planilla de ejemplo, sin sync periódico.")
         _scheduler = BackgroundScheduler(timezone="UTC")
         return _scheduler
     if interval_min <= 0:
-        logger.info("SYNC_INTERVAL_MIN=0 → sync automático desactivado, solo /sync manual.")
+        logger.info("SYNC_INTERVAL_MIN=0: sync automático desactivado, solo /sync manual.")
         _scheduler = BackgroundScheduler(timezone="UTC")  # vacío, no programa nada
         return _scheduler
 

@@ -401,7 +401,7 @@ class MerchBot:
                         if isinstance(result, dict) else type(result).__name__
                     )
                     logger.info(
-                        "  -> %s(%r) → %s", fc.name, args, resumen_result,
+                        "  -> %s(%r) -> %s", fc.name, args, resumen_result,
                     )
                     tool_response_parts.append(
                         genai_types.Part.from_function_response(
