@@ -85,7 +85,7 @@ class TestRegistroDeInteracciones:
             ChatService(assistant=assistant).atender("s1", "hola")
         [i] = listar_interacciones()
         assert i["estado"] == "error"
-        assert i["respuesta"] is None
+        assert i["respuesta"] == "[error: error_desconocido]"
 
     def test_respuesta_de_respaldo_queda_como_error(self, assistant):
         assistant.responder.return_value = Respuesta("No pude armar...", [], completa=False)

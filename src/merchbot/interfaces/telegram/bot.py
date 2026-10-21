@@ -33,6 +33,7 @@ from telegram.ext import (
 
 from merchbot.config import settings
 from merchbot.core.chat_service import ChatService, get_chat_service
+from merchbot.core.errores import describir_error
 from merchbot.data.refresh import actualizar_datos
 from merchbot.interfaces.telegram.formatters import (
     format_comprar_message,
@@ -333,10 +334,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _reply_largo(update, respuesta)
     except Exception as e:
         logger.exception("Error procesando mensaje de user_id=%s", user_id)
-        await update.message.reply_text(
-            "Tuve un problema procesando tu consulta 😕\n"
-            f"Intentá de nuevo. ({type(e).__name__})"
-        )
+        await update.message.reply_text(describir_error(e).mensaje)
 
 
 # ---------------------------------------------------------------------------

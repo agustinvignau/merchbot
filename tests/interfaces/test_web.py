@@ -97,7 +97,7 @@ class TestChat:
         asistente.falla = True
         r = client.post("/api/chat", json={"message": "hola"})
         assert r.status_code == 502
-        assert "Probá de nuevo" in r.json()["detail"]
+        assert "Probá de nuevo" in r.json()["detail"]   # error genérico: mensaje genérico
         assert "Gemini caído" not in r.text  # no se filtran detalles internos
 
 
@@ -234,4 +234,15 @@ class TestVozWeb:
 def test_la_respuesta_incluye_las_fuentes(client):
     assert client.post("/api/chat", json={"message": "medidas del talle L"}).json()["fuentes"] == ["Guía de talles"]
     assert client.post("/api/chat", json={"message": "hola"}).json()["fuentes"] == []
+
+
+def test_error_de_modelo_no_disponible_se_explica(client, asistente, monkeypatch):
+    from google.genai import errors
+
+    def falla(*a, **k):
+        raise errors.ClientError(404, {"error": {"code": 404, "status": "NOT_FOUND", "message": "no longer available"}})
+    monkeypatch.setattr(asistente, "responder", falla)
+    r = client.post("/api/chat", json={"message": "hola"})
+    assert r.status_code == 502
+    assert "GEMINI_MODEL" in r.json()["detail"]
 
