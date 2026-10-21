@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     # Similitud de coseno mínima para considerar relevante un fragmento.
     rag_min_score: float = 0.55
 
+    # --- Sentimiento y prioridad de reclamos ---
+    # "auto": transformers si está instalado (pip install -e ".[nlp]"), si no el léxico propio.
+    sentimiento_motor: str = "auto"
+    sentimiento_modelo: str = "pysentimiento/robertuito-sentiment-analysis"
+
     # --- Horario de atención humana ---
     # Fuera de este horario el asistente atiende igual y lo aclara; los reclamos
     # quedan registrados para que una persona los vea el próximo día hábil.

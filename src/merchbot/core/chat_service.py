@@ -16,6 +16,7 @@ from typing import Callable, Optional
 
 from merchbot.core import reports, tools
 from merchbot.core.assistant import MerchBot, UserId
+from merchbot.core.errores import describir_error
 from merchbot.core.horario import resolver_momento
 from merchbot.core.memory import SqlConversationStore, Turno
 from merchbot.core.normalizacion import normalizar_dictado
@@ -102,11 +103,11 @@ class ChatService:
         inicio = time.perf_counter()
         try:
             respuesta = self.assistant.responder(user_id, texto, momento=momento, canal=canal)
-        except Exception:
+        except Exception as e:
             registrar_interaccion(
                 canal=canal, user_id=str(user_id), momento=momento, consulta=texto,
-                respuesta=None, herramientas=[], duracion_ms=_ms_desde(inicio), estado="error",
-                origen=origen,
+                respuesta=f"[error: {describir_error(e).codigo}]", herramientas=[],
+                duracion_ms=_ms_desde(inicio), estado="error", origen=origen,
             )
             raise
         duracion = _ms_desde(inicio)

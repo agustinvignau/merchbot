@@ -9,7 +9,7 @@ Decisión: NO normalizamos en ProductoBase + Variante porque:
 - El bot busca por combinación de atributos, no por jerarquía.
 - Si en el futuro hace falta normalizar (para reportes), migramos.
 """
-from sqlalchemy import Column, Date, DateTime, Index, Integer, String, Text
+from sqlalchemy import Column, Date, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import declarative_base
 
 from merchbot.timeutils import iso_utc, utc_now
@@ -190,6 +190,14 @@ class Reclamo(Base):
     descripcion = Column(Text, nullable=False)
     cliente = Column(String(160), nullable=True)
     estado = Column(String(16), nullable=False, default="abierto", index=True)
+    # Análisis automático (Fase 6). Nullables: los reclamos viejos no lo tienen.
+    sentimiento = Column(String(3), nullable=True)              # "NEG" | "NEU" | "POS"
+    sentimiento_puntaje = Column(Float, nullable=True)          # -1 a 1
+    prioridad = Column(String(8), nullable=True, index=True)    # "alta" | "media" | "baja"
+    prioridad_puntaje = Column(Integer, nullable=True)          # 0 a 100
+    requiere_humano = Column(Integer, nullable=True)            # 0/1
+    motivos = Column(Text, nullable=True)                       # separados por " | "
+    analisis_motor = Column(String(16), nullable=True)          # "lexico" | "transformers"
 
     def to_dict(self) -> dict:
         return {
@@ -201,6 +209,13 @@ class Reclamo(Base):
             "descripcion": self.descripcion,
             "cliente": self.cliente,
             "estado": self.estado,
+            "sentimiento": self.sentimiento,
+            "sentimiento_puntaje": self.sentimiento_puntaje,
+            "prioridad": self.prioridad,
+            "prioridad_puntaje": self.prioridad_puntaje,
+            "requiere_humano": bool(self.requiere_humano),
+            "motivos": [m for m in (self.motivos or "").split(" | ") if m],
+            "analisis_motor": self.analisis_motor,
         }
 
 

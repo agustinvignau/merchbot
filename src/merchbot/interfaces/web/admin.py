@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
@@ -105,10 +105,14 @@ def interacciones(
 
 
 @router.get("/reclamos", dependencies=[Depends(requiere_admin)])
-def reclamos(estado: Optional[str] = None) -> dict:
+def reclamos(
+    estado: Optional[str] = None,
+    orden: Literal["prioridad", "recientes"] = "prioridad",
+    solo_humano: bool = False,
+) -> dict:
     if estado and estado not in ESTADOS_RECLAMO:
         raise HTTPException(422, f"Estado inválido. Usá uno de: {', '.join(ESTADOS_RECLAMO)}.")
-    filas = listar_reclamos(estado=estado or None)
+    filas = listar_reclamos(estado=estado or None, orden=orden, solo_humano=solo_humano)
     return {"cantidad": len(filas), "reclamos": filas}
 
 

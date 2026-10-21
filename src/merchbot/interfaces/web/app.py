@@ -37,6 +37,7 @@ from pydantic import BaseModel, Field
 from merchbot import __version__
 from merchbot.config import settings
 from merchbot.core.chat_service import MAX_MESSAGE_LEN, ChatService, get_chat_service
+from merchbot.core.errores import describir_error
 from merchbot.core.horario import dias_habiles, resolver_momento, validar_hora
 from merchbot.data.models import TIPOS_RECLAMO
 from merchbot.interfaces.web.admin import router as admin_router
@@ -169,12 +170,10 @@ def create_app(
             a = svc.atender(sid, body.message, canal="web", hora_simulada=hora, origen=body.origen)
             return ChatReply(reply=a.texto, hora=a.hora, fuera_de_horario=a.fuera_de_horario,
                              tipo=a.tipo, consulta=a.consulta, fuentes=a.fuentes)
-        except Exception:
-            logger.exception("Error procesando mensaje de %s", sid)
-            raise HTTPException(
-                status_code=502,
-                detail="No pude consultar al asistente. Probá de nuevo en unos segundos.",
-            )
+        except Exception as e:
+            error = describir_error(e)
+            logger.exception("Error procesando mensaje de %s (%s)", sid, error.codigo)
+            raise HTTPException(status_code=502, detail=error.mensaje)
 
     @app.get("/api/historial", response_model=Historial)
     def historial(

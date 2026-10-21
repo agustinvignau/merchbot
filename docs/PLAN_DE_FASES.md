@@ -24,7 +24,7 @@ La entrega final es **presencial con defensa individual**: cada fase tiene que s
 | 3 | Panel admin con métricas ✅ | Dashboard de uso y reclamos | Realismo, valor demostrable | Hecha 20/10 |
 | 4 | Voz ✅ | Hablarle al bot y que responda en voz | Originalidad (tema de la materia) | Hecha 20/10 |
 | 5 | RAG de políticas ✅ | Preguntas frecuentes y procedimientos con embeddings | Guiar al usuario en procedimientos | Hecha 20/10 |
-| 6 | Sentimiento y prioridad de reclamos | Clasificación con `transformers` | Capacidad de resolver problemas | 15/11 |
+| 6 | Sentimiento y prioridad de reclamos ✅ | Clasificación con léxico propio y `transformers` | Capacidad de resolver problemas | Hecha 20/10 |
 | 7 | Evaluación y seguridad | Set de pruebas, login, rate limit web | Coherencia, confiabilidad | 18/11 |
 | 8 | Deploy 24/7 y portfolio | VPS, HTTPS, capturas, reflexión final | Valor social 24/7, reflexión | 24/11 |
 
@@ -175,7 +175,10 @@ Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance den
 
 ---
 
-## Fase 6 — Sentimiento y prioridad de reclamos
+## Fase 6 — Sentimiento y prioridad de reclamos ✅
+
+> **Hecha el 20/10.** Sentimiento con léxico propio en español (negación, intensificadores, atenuantes) o RoBERTuito vía `transformers` (extra opcional `.[nlp]`); prioridad 0-100 explicable (tipo, tono, urgencia, volumen, reincidencia) y marca "necesita una persona"; análisis al registrar sin bloquear el registro; panel ordenado por prioridad con motivos y filtro; aviso de prioridad en web y Telegram. Evaluación sobre 24 reclamos etiquetados: léxico 88 % (F1 0,90), VADER 42 % (F1 0,30), prioridad 79 %. 375 tests en verde.
+> Pendiente: instalar `.[nlp]` y medir RoBERTuito (el entorno de desarrollo no tenía acceso a Hugging Face).
 
 **Objetivo.** Que cada reclamo se clasifique y se ordene por urgencia.
 

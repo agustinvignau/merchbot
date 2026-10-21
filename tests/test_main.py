@@ -8,6 +8,7 @@ def test_subcomandos():
     assert parser.parse_args(["telegram"]).comando == "telegram"
     assert parser.parse_args(["cargar-demo"]).comando == "cargar-demo"
     assert parser.parse_args(["indexar-politicas"]).comando == "indexar-politicas"
+    assert parser.parse_args(["diagnostico"]).comando == "diagnostico"
 
 
 def test_sin_subcomando_no_falla_el_parseo():

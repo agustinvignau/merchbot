@@ -6,6 +6,7 @@ Uso:
     python -m merchbot telegram        # bot de Telegram (long-polling)
     python -m merchbot cargar-demo     # carga la planilla de ejemplo en la base
     python -m merchbot indexar-politicas  # (re)indexa data/politicas.md para el RAG
+    python -m merchbot diagnostico     # prueba la API key, el modelo y los embeddings
 
 Instalado con pip, también funciona como comando: `merchbot web`.
 """
@@ -76,6 +77,46 @@ def _indexar(_: argparse.Namespace) -> int:
     return 1 if resultado.fragmentos == 0 else 0
 
 
+def _diagnostico(_: argparse.Namespace) -> int:
+    """Prueba la conexión con Gemini y sugiere qué cambiar si algo falla."""
+    from merchbot.core.errores import describir_error
+
+    print(f"Modelo de chat configurado: {settings.gemini_model}")
+    print(f"Modelo de embeddings:       {settings.embedding_model}\n")
+    if not settings.gemini_api_key or settings.gemini_api_key.startswith("tu_"):
+        print("[X] Falta GEMINI_API_KEY en el .env (o sigue el valor de ejemplo).")
+        return 1
+    from google import genai
+
+    cliente = genai.Client(api_key=settings.gemini_api_key)
+    ok = True
+    try:
+        modelos = [m for m in cliente.models.list()
+                   if "generateContent" in (getattr(m, "supported_actions", None) or [])]
+        nombres = sorted(m.name.replace("models/", "") for m in modelos)
+        print(f"[OK] La API key funciona. Modelos de chat disponibles ({len(nombres)}):")
+        for n in nombres:
+            if "flash" in n or "pro" in n:
+                print(f"     - {n}")
+        if settings.gemini_model not in nombres:
+            print(f"\n[!]  '{settings.gemini_model}' no aparece en la lista: elegí uno de arriba y ponelo en GEMINI_MODEL.")
+    except Exception as e:  # noqa: BLE001
+        print(f"[X] No pude listar modelos: {describir_error(e).mensaje}\n    Detalle: {e}")
+        return 1
+    try:
+        r = cliente.models.generate_content(model=settings.gemini_model, contents="Respondé solo: OK")
+        print(f"\n[OK] El modelo de chat responde: {(r.text or '').strip()[:40]}")
+    except Exception as e:  # noqa: BLE001
+        ok = False
+        print(f"\n[X] El modelo de chat falla: {describir_error(e).mensaje}\n    Detalle: {e}")
+    try:
+        cliente.models.embed_content(model=settings.embedding_model, contents=["prueba"])
+        print("[OK] Los embeddings funcionan (RAG semántico).")
+    except Exception as e:  # noqa: BLE001
+        print(f"[!]  Los embeddings fallan, el RAG va a usar BM25: {describir_error(e).mensaje}\n    Detalle: {e}")
+    return 0 if ok else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="merchbot",
@@ -97,10 +138,24 @@ def build_parser() -> argparse.ArgumentParser:
     rag = sub.add_parser("indexar-politicas", help="indexa data/politicas.md para el RAG")
     rag.set_defaults(func=_indexar)
 
+    diag = sub.add_parser("diagnostico", help="prueba la API key, el modelo y los embeddings")
+    diag.set_defaults(func=_diagnostico)
+
     return parser
 
 
+def _consola_utf8() -> None:
+    """La consola de Windows usa cp1252 por defecto: sin esto, cualquier log con
+    tildes raras, flechas o emojis tira 'UnicodeEncodeError' / 'Logging error'."""
+    for flujo in (sys.stdout, sys.stderr):
+        try:
+            flujo.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _consola_utf8()
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.comando is None:  # sin subcomando → web

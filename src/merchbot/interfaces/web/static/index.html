@@ -785,9 +785,12 @@
       const cuando = r.fuera_de_horario
         ? "Ahora el depósito está cerrado: lo revisa una persona el próximo día hábil."
         : "Lo revisa una persona del equipo.";
+      const prioridad = r.requiere_humano
+        ? " Quedó marcado como prioritario para que lo vean primero."
+        : "";
       agregar(`<div class="comprobante datos">
           <div class="numero">Reclamo #${escapar(r.numero)}</div>
-          <p class="nota">Registrado a las ${escapar(r.hora)}. ${escapar(cuando)} Guardá el número para consultarlo: “¿cómo va el reclamo ${escapar(r.numero)}?”.</p>
+          <p class="nota">Registrado a las ${escapar(r.hora)}. ${escapar(cuando)}${escapar(prioridad)} Guardá el número para consultarlo: “¿cómo va el reclamo ${escapar(r.numero)}?”.</p>
         </div>`, "mensaje-bot", r.hora);
     } catch (e) {
       errorReclamo.textContent = e.message;

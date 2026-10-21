@@ -106,7 +106,7 @@ class TestPercentil:
 
 class TestReclamosAdmin:
     def test_listar_y_filtrar(self, actividad):
-        assert [r["numero"] for r in listar_reclamos()] == [2, 1]
+        assert [r["numero"] for r in listar_reclamos(orden="recientes")] == [2, 1]
         cambiar_estado_reclamo(1, "resuelto")
         assert [r["numero"] for r in listar_reclamos(estado="abierto")] == [2]
 
@@ -136,4 +136,26 @@ def test_porcentaje_por_voz():
     t = calcular_metricas()["totales"]
     assert t["por_voz"] == 2 and t["porcentaje_por_voz"] == 50.0
     assert calcular_metricas()["por_origen"] == {"texto": 2, "voz": 2}
+
+
+class TestPrioridadEnElPanel:
+    def test_ordena_por_prioridad_y_despues_por_antiguedad(self):
+        registrar_reclamo("Quería avisar que una taza vino con el logo un poco corrido, nada grave", "producto_defectuoso")
+        registrar_reclamo("Me mandaron 100 llaveros con el logo de otro cliente!!! Inaceptable", "error_en_pedido")
+        registrar_reclamo("Otra taza con el logo un poco corrido, nada grave", "producto_defectuoso")
+        assert [r["numero"] for r in listar_reclamos()] == [2, 1, 3]
+
+    def test_solo_los_que_requieren_humano(self):
+        registrar_reclamo("Gracias, solo aviso que faltó una gorra", "faltante")
+        registrar_reclamo("Pésima atención, nadie responde y el evento es mañana", "demora")
+        assert [r["numero"] for r in listar_reclamos(solo_humano=True)] == [2]
+
+    def test_metricas_de_urgentes(self):
+        registrar_reclamo("Pésima atención, nadie responde y el evento es mañana", "demora")
+        registrar_reclamo("Gracias, solo aviso que faltó una gorra", "faltante")
+        r = calcular_metricas()["reclamos"]
+        assert r["requieren_humano"] == 1
+        assert r["pendientes_por_prioridad"]["alta"] == 1
+        cambiar_estado_reclamo(1, "resuelto")
+        assert calcular_metricas()["reclamos"]["requieren_humano"] == 0
 
