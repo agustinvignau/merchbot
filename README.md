@@ -217,7 +217,7 @@ python -m merchbot              # o simplemente: merchbot
 
 Se configura en `.env`: `TIMEZONE`, `ATENCION_DESDE`, `ATENCION_HASTA` y `ATENCION_DIAS` (0 = lunes). Por defecto, lunes a viernes de 09:00 a 18:00, hora de Buenos Aires.
 
-**Modelos de respaldo.** Con `GEMINI_MODELOS_RESPALDO=modelo1,modelo2`, si el modelo principal se queda sin cuota (429) o fue dado de baja (404), la consulta sigue con el siguiente sin repetir las funciones ya ejecutadas. El modelo agotado queda en pausa el tiempo que indica la API y después se vuelve a usar. El panel de evaluación registra qué modelo respondió cada caso.
+**Modelos de respaldo.** Con `GEMINI_MODELOS_RESPALDO=modelo1,modelo2`, si el modelo principal se queda sin cuota (429) o fue dado de baja (404), la consulta sigue con el siguiente sin repetir las funciones ya ejecutadas. El modelo agotado queda en pausa el tiempo que indica la API y después se vuelve a usar. El reporte de `scripts/evaluar_bot.py` muestra qué modelo respondió cada caso.
 
 ### Datos reales con Google Sheets
 
