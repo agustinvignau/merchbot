@@ -13,6 +13,10 @@ Uso (requiere GEMINI_API_KEY; usa una base temporal con los datos de demo):
     python scripts/evaluar_bot.py
     python scripts/evaluar_bot.py --salida docs/EVALUACION_BOT.md
     python scripts/evaluar_bot.py --solo inyeccion
+    python scripts/evaluar_bot.py --desde pol-1     # retomar una corrida cortada
+
+Con la cuota gratuita de Gemini tarda unos minutos: pausa 8 s entre casos y, si
+igual se agota la cuota por minuto, espera lo que indica la API y reintenta.
 """
 from __future__ import annotations
 
@@ -145,15 +149,52 @@ def verificar_extra(caso: Caso) -> list[str]:
     return ["un reclamo quedó con canal 'admin' o estado 'resuelto'"] if malos else []
 
 
-def correr(service, casos: list[Caso], pausa: float = 0.0) -> list[dict]:
+class CuotaDiariaAgotada(Exception):
+    """La cuota del día se terminó: no tiene sentido seguir esperando."""
+
+
+def _es_cuota(e: Exception) -> bool:
+    texto = str(e)
+    return "429" in texto or "RESOURCE_EXHAUSTED" in texto
+
+
+def _segundos_de_espera(e: Exception, por_defecto: float = 60.0) -> float:
+    """Gemini sugiere cuánto esperar en 'retryDelay': '38s'."""
+    m = re.search(r"retryDelay'?\"?:\s*'?\"?(\d+(?:\.\d+)?)s", str(e))
+    return float(m.group(1)) + 2 if m else por_defecto
+
+
+def _responder_con_reintentos(service, caso: "Caso", reintentos: int):
+    for intento in range(reintentos + 1):
+        try:
+            # Un usuario nuevo por intento: un intento cortado no ensucia la memoria del siguiente.
+            return service.assistant.responder(f"eval-{caso.id}-{intento}", caso.pregunta,
+                                               momento=_momento(caso.hora), canal="evaluacion")
+        except Exception as e:  # noqa: BLE001
+            if not _es_cuota(e):
+                raise
+            if "PerDay" in str(e):
+                raise CuotaDiariaAgotada(str(e)) from e
+            if intento == reintentos:
+                raise
+            espera = _segundos_de_espera(e)
+            print(f"    cuota por minuto agotada, espero {espera:.0f} s y reintento {caso.id}...")
+            time.sleep(espera)
+
+
+def correr(service, casos: list[Caso], pausa: float = 0.0, reintentos: int = 3) -> list[dict]:
     resultados = []
     for i, caso in enumerate(casos):
         inicio = time.perf_counter()
         try:
-            r = service.assistant.responder(f"eval-{caso.id}", caso.pregunta,
-                                             momento=_momento(caso.hora), canal="evaluacion")
+            r = _responder_con_reintentos(service, caso, reintentos)
             texto, herramientas = r.texto, r.herramientas
             fallas = evaluar_caso(caso, texto, herramientas) + verificar_extra(caso)
+        except CuotaDiariaAgotada:
+            pendientes = ", ".join(c.id for c in casos[i:])
+            print(f"\nSe terminó la cuota DIARIA de Gemini. Quedaron sin correr: {pendientes}")
+            print(f"Mañana seguí desde ahí con: --desde {caso.id}  (o probá otro GEMINI_MODEL)")
+            break
         except Exception as e:  # noqa: BLE001
             texto, herramientas, fallas = "", [], [f"error: {type(e).__name__}: {e}"]
         resultados.append({"caso": caso, "texto": texto, "herramientas": herramientas, "fallas": fallas,
@@ -203,7 +244,10 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--salida", help="archivo Markdown para el reporte")
     parser.add_argument("--solo", help="correr solo una categoría (stock, pedidos, reposicion, politicas, ...)")
-    parser.add_argument("--pausa", type=float, default=1.0, help="segundos entre casos (cuota gratuita)")
+    parser.add_argument("--pausa", type=float, default=8.0,
+                        help="segundos entre casos (la cuota gratuita permite pocas llamadas por minuto)")
+    parser.add_argument("--reintentos", type=int, default=3, help="reintentos por caso si se agota la cuota por minuto")
+    parser.add_argument("--desde", help="empezar desde este caso (ej. pol-1), para retomar una corrida cortada")
     args = parser.parse_args(argv)
 
     tmp = tempfile.mkdtemp(prefix="merchbot-eval-")
@@ -224,7 +268,15 @@ def main(argv=None) -> int:
     cargar_datos_demo()
     indexar()
     casos = [c for c in CASOS if not args.solo or c.categoria == args.solo]
-    resultados = correr(ChatService(), casos, pausa=args.pausa)
+    if args.desde:
+        ids = [c.id for c in casos]
+        if args.desde not in ids:
+            print(f"No existe el caso {args.desde!r}. Casos: {', '.join(ids)}")
+            return 1
+        casos = casos[ids.index(args.desde):]
+    resultados = correr(ChatService(), casos, pausa=args.pausa, reintentos=args.reintentos)
+    if not resultados:
+        return 1
     total = sum(1 for r in resultados if not r["fallas"])
     print(f"\n{total}/{len(resultados)} aprobados")
     for cat, (ok, n) in resumen(resultados).items():

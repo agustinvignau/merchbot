@@ -90,3 +90,40 @@ def test_correr_con_asistente_falso():
     assert [not r["fallas"] for r in resultados] == [True, False]
     md = ev.a_markdown(resultados, "falso")
     assert "1 de 2 casos aprobados" in md and "| stock | 1/1 |" in md
+
+
+ERROR_MINUTO = ("429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'details': [{'violations': "
+                "[{'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier'}]}, "
+                "{'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}}")
+ERROR_DIA = ERROR_MINUTO.replace("PerMinute", "PerDay")
+
+
+class TestCuota:
+    def test_lee_retry_delay(self):
+        assert ev._segundos_de_espera(Exception(ERROR_MINUTO)) == 39
+        assert ev._segundos_de_espera(Exception("429 sin detalle")) == 60
+
+    def test_reintenta_si_se_agota_la_cuota_por_minuto(self, monkeypatch):
+        monkeypatch.setattr(ev.time, "sleep", lambda s: None)
+        asistente = MagicMock()
+        asistente.responder.side_effect = [Exception(ERROR_MINUTO),
+                                           Respuesta("Tenés 100 unidades.", ["buscar_stock"])]
+        resultados = ev.correr(ChatService(assistant=asistente), [_caso("stock-1")])
+        assert resultados[0]["fallas"] == []
+        ids = [c.args[0] for c in asistente.responder.call_args_list]
+        assert ids == ["eval-stock-1-0", "eval-stock-1-1"]
+
+    def test_corta_si_se_agota_la_cuota_diaria(self, monkeypatch):
+        monkeypatch.setattr(ev.time, "sleep", lambda s: None)
+        asistente = MagicMock()
+        asistente.responder.side_effect = [Respuesta("Tenés 100 unidades.", ["buscar_stock"]),
+                                           Exception(ERROR_DIA)]
+        casos = [_caso("stock-1"), _caso("stock-2"), _caso("stock-3")]
+        resultados = ev.correr(ChatService(assistant=asistente), casos)
+        assert len(resultados) == 1 and asistente.responder.call_count == 2
+
+    def test_otros_errores_no_se_reintentan(self):
+        asistente = MagicMock()
+        asistente.responder.side_effect = ValueError("roto")
+        resultados = ev.correr(ChatService(assistant=asistente), [_caso("stock-1")])
+        assert "roto" in resultados[0]["fallas"][0] and asistente.responder.call_count == 1
