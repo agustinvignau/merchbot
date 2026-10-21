@@ -93,6 +93,20 @@ class Settings(BaseSettings):
     atencion_hasta: str = "18:00"
     atencion_dias: str = "0,1,2,3,4"   # 0 = lunes ... 6 = domingo
 
+    # --- Seguridad de la web ---
+    # Usuarios del chat: "ana:clave,beto:pbkdf2_sha256$..." (ver `merchbot hashear-clave`).
+    # Vacío = chat abierto, solo para usar en tu máquina.
+    chat_usuarios: str = ""
+    # Clave para firmar las sesiones. Vacía = se genera una al arrancar (las sesiones
+    # se cierran al reiniciar). Generala con: python -c "import secrets; print(secrets.token_hex(32))"
+    secret_key: str = ""
+    sesion_horas: int = 12
+    limite_chat_por_minuto: int = 20
+    limite_login_intentos: int = 5
+    limite_login_minutos: int = 5
+    # IPs de proxies cuyo X-Forwarded-For se acepta (para el límite por IP detrás de Caddy/nginx).
+    proxies_confiables: str = "127.0.0.1"
+
     # --- Panel admin (/admin) ---
     # Sin clave, el panel queda deshabilitado.
     admin_key: str = ""

@@ -13,9 +13,15 @@ Endpoints:
     POST   /api/sync       actualiza la base desde la fuente de datos
     GET    /health         estado del servicio
     GET    /admin          panel de métricas (API en /api/admin, ver admin.py)
+    GET    /login          ingreso al chat (si CHAT_USUARIOS está configurado)
+    POST   /api/login      {"usuario", "clave"} -> cookie de sesión firmada
+    POST   /api/logout     cierra la sesión
+    GET    /api/sesion     si hace falta ingresar y quién está conectado
 
-Cada navegador tiene su propia conversación, identificada con una cookie de
-sesión (`merchbot_sid`). La lógica vive en ChatService, igual que en Telegram.
+Sin CHAT_USUARIOS, cada navegador tiene su propia conversación, identificada con
+una cookie (`merchbot_sid`). Con CHAT_USUARIOS, hay que ingresar y la conversación
+es del usuario (lo sigue en cualquier navegador). La lógica vive en ChatService,
+igual que en Telegram. Seguridad: ver security/ y docs/SEGURIDAD.md.
 
 Los endpoints que atienden al usuario aceptan una hora simulada ("HH:MM") para
 la demo de atención 24/7: el asistente responde como si fuera esa hora.
@@ -30,7 +36,7 @@ from pathlib import Path
 from typing import Callable, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -41,12 +47,15 @@ from merchbot.core.errores import describir_error
 from merchbot.core.horario import dias_habiles, resolver_momento, validar_hora
 from merchbot.data.models import TIPOS_RECLAMO
 from merchbot.interfaces.web.admin import router as admin_router
+from merchbot.interfaces.web.cabeceras import agregar_cabeceras_de_seguridad
+from merchbot.security import auth, limites
 
 
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 SESSION_COOKIE = "merchbot_sid"
+AUTH_COOKIE = "merchbot_auth"
 SESSION_MAX_AGE = 60 * 60 * 24 * 30  # 30 días
 _SID_VALIDO = re.compile(r"^[a-f0-9]{32}$")
 
@@ -90,12 +99,34 @@ class Historial(BaseModel):
     mensajes: list[Turno]
 
 
+class Login(BaseModel):
+    usuario: str = Field(..., max_length=64)
+    clave: str = Field(..., max_length=256)
+
+
 # ---------------------------------------------------------------------------
 # Sesión
 # ---------------------------------------------------------------------------
 
+def _ip(request: Request) -> str:
+    return request.client.host if request.client else "desconocida"
+
+
+def _usuario(request: Request) -> Optional[str]:
+    return auth.leer_token(request.cookies.get(AUTH_COOKIE))
+
+
 def _session_id(request: Request, response: Response) -> str:
-    """Devuelve el id de sesión del navegador; si no hay uno válido, crea uno."""
+    """Identifica la conversación.
+
+    Con login activo: el usuario (401 si no ingresó). Sin login: una cookie por
+    navegador, que se crea si no hay una válida.
+    """
+    if auth.login_requerido():
+        usuario = _usuario(request)
+        if usuario is None:
+            raise HTTPException(status_code=401, detail="Ingresá con tu usuario para usar el chat.")
+        return f"web:u:{usuario}"
     sid = request.cookies.get(SESSION_COOKIE, "")
     if not _SID_VALIDO.match(sid):
         sid = uuid.uuid4().hex
@@ -141,12 +172,47 @@ def create_app(
         lifespan=lifespan,
     )
 
+    agregar_cabeceras_de_seguridad(app)
+
     def service() -> ChatService:
         return service_factory()
 
     @app.get("/", include_in_schema=False)
-    def index() -> FileResponse:
+    def index(request: Request):
+        if auth.login_requerido() and _usuario(request) is None:
+            return RedirectResponse("/login", status_code=303)
         return FileResponse(STATIC_DIR / "index.html")
+
+    @app.get("/login", include_in_schema=False)
+    def pagina_login(request: Request):
+        if not auth.login_requerido() or _usuario(request):
+            return RedirectResponse("/", status_code=303)
+        return FileResponse(STATIC_DIR / "login.html")
+
+    @app.get("/api/sesion")
+    def sesion(request: Request) -> dict:
+        return {"login_requerido": auth.login_requerido(), "usuario": _usuario(request)}
+
+    @app.post("/api/login")
+    def login(body: Login, request: Request, response: Response) -> dict:
+        if not auth.login_requerido():
+            return {"usuario": None, "login_requerido": False}
+        if not limites.permitir(limites.limite_login(), ("chat", _ip(request))):
+            raise HTTPException(429, "Demasiados intentos. Esperá unos minutos y probá de nuevo.")
+        usuario = auth.autenticar(body.usuario, body.clave)
+        if usuario is None:
+            raise HTTPException(401, "Usuario o clave incorrectos.")
+        limites.limite_login().reset(("chat", _ip(request)))
+        response.set_cookie(
+            AUTH_COOKIE, auth.crear_token(usuario), max_age=settings.sesion_horas * 3600,
+            httponly=True, samesite="lax", secure=settings.app_env == "production", path="/",
+        )
+        return {"usuario": usuario, "login_requerido": True}
+
+    @app.post("/api/logout")
+    def logout(response: Response) -> dict:
+        response.delete_cookie(AUTH_COOKIE, path="/")
+        return {"usuario": None}
 
     @app.get("/health")
     def health() -> dict:
@@ -166,6 +232,11 @@ def create_app(
         svc: ChatService = Depends(service),
     ) -> ChatReply:
         hora = _hora(body.hora)
+        if not limites.permitir(limites.limite_chat(), sid):
+            raise HTTPException(
+                status_code=429,
+                detail="Estás mandando muchas consultas seguidas. Esperá un minuto y seguimos.",
+            )
         try:
             a = svc.atender(sid, body.message, canal="web", hora_simulada=hora, origen=body.origen)
             return ChatReply(reply=a.texto, hora=a.hora, fuera_de_horario=a.fuera_de_horario,
@@ -219,6 +290,8 @@ def create_app(
         sid: str = Depends(_session_id),
         svc: ChatService = Depends(service),
     ) -> dict:
+        if not limites.permitir(limites.limite_chat(), sid):
+            raise HTTPException(429, "Estás mandando muchos reclamos seguidos. Esperá un minuto.")
         resultado = svc.registrar_reclamo(
             sid, body.descripcion, body.tipo, body.cliente,
             canal="web", hora_simulada=_hora(body.hora),
@@ -228,7 +301,7 @@ def create_app(
         return resultado
 
     @app.get("/api/reclamos/{numero}")
-    def ver_reclamo(numero: int, svc: ChatService = Depends(service)) -> dict:
+    def ver_reclamo(numero: int, _: str = Depends(_session_id), svc: ChatService = Depends(service)) -> dict:
         resultado = svc.consultar_reclamo(numero)
         if not resultado.get("encontrado"):
             raise HTTPException(status_code=404, detail=f"No existe el reclamo #{numero}.")
@@ -248,7 +321,7 @@ def create_app(
         }
 
     @app.post("/api/sync")
-    def sync() -> dict:
+    def sync(_: str = Depends(_session_id)) -> dict:
         from merchbot.data.refresh import actualizar_datos
 
         resultado = actualizar_datos()
@@ -290,4 +363,12 @@ def run(host: Optional[str] = None, port: Optional[int] = None) -> None:
         datefmt="%H:%M:%S",
     )
     app = create_app(on_startup=_arranque)
-    uvicorn.run(app, host=host or settings.web_host, port=port or settings.web_port)
+    uvicorn.run(
+        app,
+        host=host or settings.web_host,
+        port=port or settings.web_port,
+        # Detrás de un proxy con HTTPS (Caddy/nginx), la IP real llega en X-Forwarded-For.
+        # Solo se le cree a los proxies listados, para que nadie pueda falsearla.
+        proxy_headers=True,
+        forwarded_allow_ips=settings.proxies_confiables,
+    )

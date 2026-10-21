@@ -7,6 +7,7 @@ Uso:
     python -m merchbot cargar-demo     # carga la planilla de ejemplo en la base
     python -m merchbot indexar-politicas  # (re)indexa data/politicas.md para el RAG
     python -m merchbot diagnostico     # prueba la API key, el modelo y los embeddings
+    python -m merchbot hashear-clave   # genera el hash de una clave para CHAT_USUARIOS
 
 Instalado con pip, también funciona como comando: `merchbot web`.
 """
@@ -117,6 +118,23 @@ def _diagnostico(_: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _hashear(_: argparse.Namespace) -> int:
+    import getpass
+
+    from merchbot.security.auth import hashear_clave
+
+    clave = getpass.getpass("Clave (no se muestra): ")
+    if len(clave) < 10:
+        print("Usá al menos 10 caracteres.")
+        return 1
+    if getpass.getpass("Repetila: ") != clave:
+        print("No coinciden.")
+        return 1
+    print("\nAgregá esto en CHAT_USUARIOS del .env (reemplazá 'usuario'):")
+    print(f"usuario:{hashear_clave(clave)}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="merchbot",
@@ -140,6 +158,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     diag = sub.add_parser("diagnostico", help="prueba la API key, el modelo y los embeddings")
     diag.set_defaults(func=_diagnostico)
+
+    hashear = sub.add_parser("hashear-clave", help="genera el hash de una clave para CHAT_USUARIOS")
+    hashear.set_defaults(func=_hashear)
 
     return parser
 
