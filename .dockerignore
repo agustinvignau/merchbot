@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+**/__pycache__
+**/*.pyc
+*.egg-info
+.pytest_cache
+pytest-cache-files-*
+venv
+.venv
+tests
+scripts
+docs
+data/*.db
+data/*.db-*

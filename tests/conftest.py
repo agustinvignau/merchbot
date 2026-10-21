@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 import merchbot.data.database as db_module
 from merchbot.data.models import Base, Pedido, StockItem
@@ -24,6 +25,9 @@ def test_engine():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        # Una sola conexión compartida: si no, cada thread (por ejemplo los de
+        # FastAPI) abriría su propia base en memoria, vacía.
+        poolclass=StaticPool,
         future=True,
     )
     Base.metadata.create_all(bind=engine)

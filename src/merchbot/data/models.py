@@ -9,10 +9,10 @@ Decisión: NO normalizamos en ProductoBase + Variante porque:
 - El bot busca por combinación de atributos, no por jerarquía.
 - Si en el futuro hace falta normalizar (para reportes), migramos.
 """
-from merchbot.timeutils import utc_now
-
-from sqlalchemy import Column, Integer, String, DateTime, Date, Index
+from sqlalchemy import Column, Date, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import declarative_base
+
+from merchbot.timeutils import utc_now
 
 
 Base = declarative_base()
@@ -107,3 +107,22 @@ class Pedido(Base):
             "producto": self.producto,
             "cantidad": self.cantidad,
         }
+
+
+class Mensaje(Base):
+    """Un turno de conversación (memoria persistente del asistente).
+
+    `user_id` es texto para servir a las dos interfaces: el ID numérico de
+    Telegram o el ID de sesión de la web.
+    """
+
+    __tablename__ = "mensajes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(64), nullable=False, index=True)
+    role = Column(String(8), nullable=False)        # "user" o "model"
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Mensaje {self.user_id} {self.role} {self.text[:30]!r}>"

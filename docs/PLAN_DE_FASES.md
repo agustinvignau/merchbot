@@ -19,7 +19,7 @@ La entrega final es **presencial con defensa individual**: cada fase tiene que s
 | Fase | Nombre | Qué suma | Cubre del enunciado | Meta |
 |---|---|---|---|---|
 | 0 | Base saneada ✅ | Paquete `merchbot`, capa de servicio común, limpieza | — | Hecha 20/10 |
-| 1 | Interfaz web + Docker | Chat en el navegador, deploy local con un comando | Interfaz conversacional | 25/10 |
+| 1 | Interfaz web + Docker ✅ | Chat en el navegador, deploy local con un comando | Interfaz conversacional | Hecha 20/10 |
 | 2 | Registro, hora simulada y reclamos | Tabla de interacciones, selector de hora, `/reclamo` | Registro, cualquier hora, 4+ situaciones | 28/10 |
 | 3 | Panel admin con métricas | Dashboard de uso y reclamos | Realismo, valor demostrable | 30/10 (preentrega) |
 | 4 | Voz | Hablarle al bot y que responda en voz | Originalidad (tema de la materia) | 05/11 |
@@ -55,7 +55,10 @@ Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance den
 
 ---
 
-## Fase 1 — Interfaz web + Docker
+## Fase 1 — Interfaz web + Docker ✅
+
+> **Hecha el 20/10.** FastAPI en `interfaces/web/app.py` con `/api/chat`, historial, atajos sin IA (`/api/comprar`, `/api/resumen`), `/api/sync` y `/health`; chat en un solo HTML; memoria de conversación en la tabla `mensajes`; sesión por cookie; datos de demo desde la planilla (`DATA_SOURCE`); CLI `merchbot web | telegram | cargar-demo`; `Dockerfile` y `docker-compose.yml`. 162 tests en verde.
+> Pendiente de verificar: el build de Docker (el entorno donde se construyó no tenía acceso a Docker Hub) y las respuestas reales de Gemini.
 
 **Objetivo.** Salir de Telegram: un chat en el navegador que corre local con un comando y se despliega igual en un VPS.
 
@@ -64,7 +67,8 @@ Las fechas son metas, no promesas: si una fase se alarga, se recorta alcance den
 - Frontend de un solo archivo (`src/merchbot/interfaces/web/static/index.html`): burbujas de chat, indicador de "escribiendo…", responsive. Sin build ni Node.
 - Memoria de conversación persistida en la base (hoy está en RAM y se pierde al reiniciar).
 - `Dockerfile` y `docker-compose.yml`; configuración 100% por `.env`.
-- Telegram se mantiene como segunda interfaz opcional (`python -m merchbot --telegram`).
+- Telegram se mantiene como segunda interfaz opcional (`python -m merchbot telegram`).
+- Datos de demo desde `data/Stock_Merchandising_Demo.xlsx` para correr sin Google Sheets (agregado durante la fase).
 
 **Archivos nuevos:** `src/merchbot/interfaces/web/app.py`, `src/merchbot/interfaces/web/static/index.html`, `Dockerfile`, `docker-compose.yml`.
 

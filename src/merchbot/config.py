@@ -41,6 +41,22 @@ class Settings(BaseSettings):
                 ids.add(int(raw))
         return ids
 
+    # --- Origen de los datos ---
+    # "sheets": sincroniza desde Google Sheets (requiere SHEETS_ID).
+    # "demo":   carga la planilla de ejemplo data/Stock_Merchandising_Demo.xlsx.
+    # "auto":   sheets si hay SHEETS_ID, demo si no.
+    data_source: str = "auto"
+    demo_xlsx_path: Path = BASE_DIR / "data" / "Stock_Merchandising_Demo.xlsx"
+
+    @property
+    def fuente_de_datos(self) -> str:
+        fuente = self.data_source.strip().lower()
+        if fuente == "auto":
+            return "sheets" if self.sheets_id.strip() else "demo"
+        if fuente not in ("sheets", "demo"):
+            raise ValueError(f"DATA_SOURCE inválido: {self.data_source!r} (usá auto, sheets o demo)")
+        return fuente
+
     # --- Google Sheets ---
     sheets_id: str = ""
     sheets_stock_tab: str = "Stock"
@@ -49,6 +65,12 @@ class Settings(BaseSettings):
 
     # --- DB ---
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'merchbot.db'}"
+
+    # --- Web ---
+    # 127.0.0.1 = solo accesible desde esta máquina. En Docker se usa 0.0.0.0
+    # y el puerto se publica solo en localhost (ver docker-compose.yml).
+    web_host: str = "127.0.0.1"
+    web_port: int = 8000
 
     # --- App ---
     log_level: str = "INFO"

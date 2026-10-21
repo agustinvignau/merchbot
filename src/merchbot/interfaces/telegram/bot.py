@@ -32,7 +32,7 @@ from telegram.ext import (
 
 from merchbot.config import settings
 from merchbot.core.chat_service import ChatService, get_chat_service
-from merchbot.data.sheets_sync import sync_from_sheets
+from merchbot.data.refresh import actualizar_datos
 from merchbot.interfaces.telegram.formatters import (
     format_comprar_message,
     format_resumen_message,
@@ -239,7 +239,7 @@ async def cmd_sync(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=update.effective_chat.id, action=ChatAction.TYPING
     )
     try:
-        result = await asyncio.to_thread(sync_from_sheets)
+        result = await asyncio.to_thread(actualizar_datos)
         await update.message.reply_text(result.resumen())
     except Exception as e:
         logger.exception("Error en /sync")

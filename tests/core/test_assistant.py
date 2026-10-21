@@ -11,7 +11,8 @@ Las fixtures de datos (db_with_data) viven en tests/conftest.py.
 """
 from unittest.mock import MagicMock, patch
 
-from merchbot.core.assistant import MerchBot, Turno
+from merchbot.core.assistant import MerchBot
+from merchbot.core.memory import InMemoryConversationStore
 
 
 # ---------------------------------------------------------------------------
@@ -68,26 +69,34 @@ class TestMemoria:
         with patch("merchbot.core.assistant.genai.Client"):
             return MerchBot(api_key="fake")
 
+    def test_por_defecto_usa_memoria_en_ram(self):
+        assert isinstance(self._bot_sin_red().memoria, InMemoryConversationStore)
+
     def test_clear_memory_devuelve_cantidad(self):
         bot = self._bot_sin_red()
-        bot._memoria[42].extend([
-            Turno("user", "hola"), Turno("model", "hola"),
-        ])
+        bot.memoria.append(42, "user", "hola")
+        bot.memoria.append(42, "model", "hola")
         assert bot.clear_memory(42) == 2
 
     def test_memoria_respeta_maxlen(self):
         bot = self._bot_sin_red()
         for i in range(30):
-            bot._memoria[1].append(Turno("user", f"q{i}"))
-        assert len(bot._memoria[1]) == MerchBot.HISTORIAL_MAX_TURNOS
+            bot.memoria.append(1, "user", f"q{i}")
+        assert len(bot.memoria.history(1)) == MerchBot.HISTORIAL_MAX_TURNOS
 
     def test_memoria_aislada_por_usuario(self):
         bot = self._bot_sin_red()
-        bot._memoria[1].append(Turno("user", "soy 1"))
-        bot._memoria[2].append(Turno("user", "soy 2"))
+        bot.memoria.append(1, "user", "soy 1")
+        bot.memoria.append(2, "user", "soy 2")
         bot.clear_memory(1)
-        assert 1 not in bot._memoria
-        assert len(bot._memoria[2]) == 1
+        assert bot.memoria.history(1) == []
+        assert len(bot.memoria.history(2)) == 1
+
+    def test_acepta_un_store_externo(self):
+        store = InMemoryConversationStore(max_turnos=2)
+        with patch("merchbot.core.assistant.genai.Client"):
+            bot = MerchBot(api_key="fake", store=store)
+        assert bot.memoria is store
 
 
 # ---------------------------------------------------------------------------
@@ -116,9 +125,10 @@ class TestAskBasico:
             _mock_response_with_text("ok"),
         ])
         bot.ask(user_id=7, query="hola")
-        assert len(bot._memoria[7]) == 2
-        assert bot._memoria[7][0].text == "hola"
-        assert bot._memoria[7][1].text == "ok"
+        historial = bot.memoria.history(7)
+        assert [t.role for t in historial] == ["user", "model"]
+        assert historial[0].text == "hola"
+        assert historial[1].text == "ok"
 
 
 class TestAskConFunctionCalling:
@@ -227,7 +237,7 @@ class TestAskRespuestaVaciaPostToolCall:
         ])
         bot.ask(user_id=99, query="????")
         # El historial debería estar vacío (no se guardó nada)
-        assert 99 not in bot._memoria or len(bot._memoria[99]) == 0
+        assert bot.memoria.history(99) == []
 
 
 class TestAskLimiteIteraciones:

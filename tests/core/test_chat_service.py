@@ -78,3 +78,23 @@ class TestOtrasOperaciones:
 def test_get_chat_service_es_singleton(monkeypatch):
     monkeypatch.setattr(cs_module, "_chat_service", None)
     assert get_chat_service() is get_chat_service()
+
+
+def test_history_devuelve_la_conversacion_guardada():
+    from merchbot.core.memory import InMemoryConversationStore
+
+    store = InMemoryConversationStore()
+    store.append("s1", "user", "hola")
+    service = ChatService(assistant=MagicMock(memoria=store))
+    assert [t.text for t in service.history("s1")] == ["hola"]
+
+
+def test_el_asistente_por_defecto_guarda_en_la_base(monkeypatch):
+    from unittest.mock import patch
+
+    from merchbot.core.chat_service import crear_asistente_persistente
+    from merchbot.core.memory import SqlConversationStore
+
+    with patch("merchbot.core.assistant.genai.Client"):
+        bot = crear_asistente_persistente()
+    assert isinstance(bot.memoria, SqlConversationStore)

@@ -1,42 +1,95 @@
-"""Entry point del MerchBot.
-
-Flujo de arranque:
-1. Inicializa la DB.
-2. Sync inicial con Google Sheets (vía scheduler).
-3. Programa sync recurrente cada SYNC_INTERVAL_MIN minutos.
-4. Arranca el bot de Telegram (long-polling).
+"""Punto de entrada de MerchBot.
 
 Uso:
-    python -m merchbot          (o, instalado: merchbot)
+    python -m merchbot                 # interfaz web en http://127.0.0.1:8000
+    python -m merchbot web --port 9000
+    python -m merchbot telegram        # bot de Telegram (long-polling)
+    python -m merchbot cargar-demo     # carga la planilla de ejemplo en la base
+
+Instalado con pip, también funciona como comando: `merchbot web`.
 """
+from __future__ import annotations
+
+import argparse
 import logging
+import sys
 
 from merchbot.config import settings
-from merchbot.data.database import init_db
-from merchbot.data.scheduler import start_scheduler, stop_scheduler
-from merchbot.interfaces.telegram.bot import run as run_telegram_bot
 
 
-def main() -> None:
-    print(f"[main] Entorno: {settings.app_env}")
-    print(f"[main] Modelo Gemini: {settings.gemini_model}")
-    print(f"[main] Base de datos: {settings.database_url}")
-    print(f"[main] Sheets ID: {settings.sheets_id}")
-    print(f"[main] Sync cada: {settings.sync_interval_min} min")
-    print("[main] Inicializando esquema de DB...")
+def _cabecera(interfaz: str) -> None:
+    print(f"[merchbot] Interfaz: {interfaz}")
+    print(f"[merchbot] Entorno: {settings.app_env}")
+    print(f"[merchbot] Modelo Gemini: {settings.gemini_model}")
+    print(f"[merchbot] Base de datos: {settings.database_url}")
+    print(f"[merchbot] Fuente de datos: {settings.fuente_de_datos}")
+
+
+def _web(args: argparse.Namespace) -> int:
+    from merchbot.interfaces.web.app import run
+
+    _cabecera("web")
+    host = args.host or settings.web_host
+    port = args.port or settings.web_port
+    print(f"[merchbot] Abrí http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}\n")
+    run(host=host, port=port)
+    return 0
+
+
+def _telegram(_: argparse.Namespace) -> int:
+    from merchbot.data.database import init_db
+    from merchbot.data.scheduler import start_scheduler, stop_scheduler
+    from merchbot.interfaces.telegram.bot import run as run_telegram_bot
+
+    _cabecera("telegram")
     init_db()
-
-    print("[main] Arrancando scheduler de sync...")
     start_scheduler()
-
-    print("[main] Listo. Arrancando bot de Telegram...\n")
     try:
         run_telegram_bot()
     finally:
-        # Shutdown limpio si alguien hace Ctrl+C
         logging.getLogger(__name__).info("Cerrando scheduler...")
         stop_scheduler()
+    return 0
+
+
+def _cargar_demo(_: argparse.Namespace) -> int:
+    from merchbot.data.database import init_db
+    from merchbot.data.demo_seed import cargar_datos_demo
+
+    init_db()
+    resultado = cargar_datos_demo()
+    print(resultado.resumen())
+    return 0 if resultado.ok else 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="merchbot",
+        description="Asistente conversacional de stock para merchandising.",
+    )
+    sub = parser.add_subparsers(dest="comando")
+
+    web = sub.add_parser("web", help="interfaz web (por defecto)")
+    web.add_argument("--host", help=f"por defecto {settings.web_host}")
+    web.add_argument("--port", type=int, help=f"por defecto {settings.web_port}")
+    web.set_defaults(func=_web)
+
+    tg = sub.add_parser("telegram", help="bot de Telegram")
+    tg.set_defaults(func=_telegram)
+
+    demo = sub.add_parser("cargar-demo", help="carga la planilla de ejemplo en la base")
+    demo.set_defaults(func=_cargar_demo)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.comando is None:  # sin subcomando → web
+        args = parser.parse_args(["web", *(argv or [])])
+    return args.func(args)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
