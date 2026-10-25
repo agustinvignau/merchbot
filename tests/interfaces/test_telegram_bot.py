@@ -110,3 +110,16 @@ class TestCmdReclamo:
 
     def test_sin_descripcion_pide_detalle(self, monkeypatch):
         assert "Contame qué pasó" in self._correr(monkeypatch, [])
+
+
+def test_en_produccion_no_arranca_abierto(monkeypatch):
+    import pytest as _pytest
+
+    from merchbot.config import settings
+    from merchbot.interfaces.telegram import bot
+
+    monkeypatch.setattr(settings, "telegram_allowed_user_ids", "")
+    monkeypatch.setattr(settings, "app_env", "production")
+    monkeypatch.setattr(settings, "telegram_bot_token", "x")
+    with _pytest.raises(SystemExit, match="TELEGRAM_ALLOWED_USER_IDS"):
+        bot.run()

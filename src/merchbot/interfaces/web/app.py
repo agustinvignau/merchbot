@@ -228,11 +228,13 @@ def create_app(
     @app.post("/api/chat", response_model=ChatReply)
     def chat(
         body: ChatRequest,
+        request: Request,
         sid: str = Depends(_session_id),
         svc: ChatService = Depends(service),
     ) -> ChatReply:
         hora = _hora(body.hora)
-        if not limites.permitir(limites.limite_chat(), sid):
+        if not (limites.permitir(limites.limite_chat(), sid)
+                and limites.permitir(limites.limite_chat_ip(), ("ip", _ip(request)))):
             raise HTTPException(
                 status_code=429,
                 detail="Estás mandando muchas consultas seguidas. Esperá un minuto y seguimos.",
@@ -287,10 +289,12 @@ def create_app(
     @app.post("/api/reclamos", status_code=201)
     def crear_reclamo(
         body: ReclamoRequest,
+        request: Request,
         sid: str = Depends(_session_id),
         svc: ChatService = Depends(service),
     ) -> dict:
-        if not limites.permitir(limites.limite_chat(), sid):
+        if not (limites.permitir(limites.limite_chat(), sid)
+                and limites.permitir(limites.limite_chat_ip(), ("ip", _ip(request)))):
             raise HTTPException(429, "Estás mandando muchos reclamos seguidos. Esperá un minuto.")
         resultado = svc.registrar_reclamo(
             sid, body.descripcion, body.tipo, body.cliente,
@@ -301,8 +305,9 @@ def create_app(
         return resultado
 
     @app.get("/api/reclamos/{numero}")
-    def ver_reclamo(numero: int, _: str = Depends(_session_id), svc: ChatService = Depends(service)) -> dict:
-        resultado = svc.consultar_reclamo(numero)
+    def ver_reclamo(numero: int, sid: str = Depends(_session_id), svc: ChatService = Depends(service)) -> dict:
+        # Solo los reclamos de esta sesión: uno ajeno da 404 igual que uno inexistente.
+        resultado = svc.consultar_reclamo(numero, user_id=sid)
         if not resultado.get("encontrado"):
             raise HTTPException(status_code=404, detail=f"No existe el reclamo #{numero}.")
         return resultado
@@ -324,6 +329,9 @@ def create_app(
     def sync(_: str = Depends(_session_id)) -> dict:
         from merchbot.data.refresh import actualizar_datos
 
+        # Límite global: cada sincronización descarga la planilla completa.
+        if not limites.permitir(limites.limite_sync(), "sync"):
+            raise HTTPException(429, "Los datos se actualizaron hace un momento. Probá en un minuto.")
         resultado = actualizar_datos()
         if not resultado.ok:
             raise HTTPException(status_code=502, detail=resultado.error)

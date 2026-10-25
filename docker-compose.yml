@@ -11,6 +11,10 @@ services:
       # Dentro del contenedor escucha en todas las interfaces...
       WEB_HOST: 0.0.0.0
       DATABASE_URL: sqlite:////app/data/merchbot.db
+      # Dentro de Docker todas las visitas llegan desde la red interna (172.16.0.0/12).
+      # Se le cree el X-Forwarded-For al proxy de esa red para conocer la IP real;
+      # si no, los límites por IP tratarían a todos como una sola persona.
+      PROXIES_CONFIABLES: "127.0.0.1,172.16.0.0/12"
     ports:
       # ...pero el puerto se publica solo en localhost. En un VPS, un proxy
       # con HTTPS (Caddy o nginx) va adelante; ver docs/PLAN_DE_FASES.md, Fase 8.

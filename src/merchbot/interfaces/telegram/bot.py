@@ -394,6 +394,11 @@ def run() -> None:
 
     # WARNING importante si está en modo abierto
     allowed = settings.allowed_user_ids_set
+    if not allowed and settings.app_env == "production":
+        raise SystemExit(
+            "TELEGRAM_ALLOWED_USER_IDS está vacío y APP_ENV=production: "
+            "el bot no arranca abierto a cualquiera. Configurá la lista de usuarios."
+        )
     if not allowed:
         logger.warning(
             "⚠️  TELEGRAM_ALLOWED_USER_IDS está VACIO. "

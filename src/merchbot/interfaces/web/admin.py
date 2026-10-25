@@ -32,19 +32,36 @@ def _clave_valida(clave: Optional[str]) -> bool:
     return bool(settings.admin_key) and hmac.compare_digest((clave or "").encode(), settings.admin_key.encode())
 
 
-def _autenticado(request: Request) -> bool:
+def _ip(request: Request) -> str:
+    return request.client.host if request.client else "desconocida"
+
+
+def _autenticado(request: Request, contar_fallos: bool = False) -> bool:
     if not settings.admin_key:
         return False
     cookie = request.cookies.get(ADMIN_COOKIE, "")
     if cookie and hmac.compare_digest(cookie, _token()):
         return True
-    return _clave_valida(request.headers.get("X-Admin-Key"))
+    header = request.headers.get("X-Admin-Key")
+    if header is None:
+        return False
+    if not contar_fallos:
+        return _clave_valida(header)
+    # El header es otra forma de ingresar: cuenta contra el mismo límite que el login,
+    # si no, se podrían probar claves sin freno.
+    clave_ip = ("admin", _ip(request))
+    if not limites.limite_login().should_respond(clave_ip):
+        raise HTTPException(429, "Demasiados intentos. Esperá unos minutos y probá de nuevo.")
+    if _clave_valida(header):
+        return True
+    limites.limite_login().register_attempt(clave_ip)
+    return False
 
 
 def requiere_admin(request: Request) -> None:
     if not settings.admin_key:
         raise HTTPException(503, "El panel está deshabilitado: configurá ADMIN_KEY en el .env.")
-    if not _autenticado(request):
+    if not _autenticado(request, contar_fallos=True):
         raise HTTPException(401, "Ingresá la clave del panel.")
 
 
@@ -68,7 +85,7 @@ def estado(request: Request) -> dict:
 def login(body: Login, request: Request, response: Response) -> dict:
     if not settings.admin_key:
         raise HTTPException(503, "El panel está deshabilitado: configurá ADMIN_KEY en el .env.")
-    ip = request.client.host if request.client else "desconocida"
+    ip = _ip(request)
     if not limites.permitir(limites.limite_login(), ("admin", ip)):
         raise HTTPException(429, "Demasiados intentos. Esperá unos minutos y probá de nuevo.")
     if not _clave_valida(body.clave):

@@ -162,3 +162,55 @@ class TestCabeceras:
         r = abierto.options("/api/chat", headers={"Origin": "https://malicioso.example",
                                                  "Access-Control-Request-Method": "POST"})
         assert "access-control-allow-origin" not in r.headers
+
+
+class TestHuecosCerrados:
+    def test_borrar_la_cookie_no_saltea_el_limite(self, monkeypatch):
+        """Sin login, pedir una sesión nueva en cada consulta choca con el límite por IP."""
+        monkeypatch.setattr(settings, "limite_chat_por_minuto", 1)
+        limites.reiniciar()
+        servicio = _servicio()
+        with TestClient(create_app(service_factory=lambda: servicio)) as c:
+            codigos = []
+            for i in range(4):
+                c.cookies.clear()
+                codigos.append(c.post("/api/chat", json={"message": f"q{i}"}).status_code)
+        assert codigos == [200, 200, 200, 429]   # el límite por IP es el triple
+
+    def test_el_header_del_panel_tiene_limite_de_intentos(self, monkeypatch):
+        monkeypatch.setattr(settings, "admin_key", "clave-admin-bien-larga")
+        monkeypatch.setattr(settings, "limite_login_intentos", 2)
+        limites.reiniciar()
+        with TestClient(create_app(service_factory=_servicio)) as c:
+            codigos = [c.get("/api/admin/metricas", headers={"X-Admin-Key": f"mala{i}"}).status_code
+                       for i in range(3)]
+            assert codigos == [401, 401, 429]
+            # bloqueado aunque ahora acierte
+            ok = c.get("/api/admin/metricas", headers={"X-Admin-Key": "clave-admin-bien-larga"})
+            assert ok.status_code == 429
+
+    def test_el_header_correcto_sigue_andando(self, monkeypatch):
+        monkeypatch.setattr(settings, "admin_key", "clave-admin-bien-larga")
+        limites.reiniciar()
+        with TestClient(create_app(service_factory=_servicio)) as c:
+            r = c.get("/api/admin/metricas", headers={"X-Admin-Key": "clave-admin-bien-larga"})
+        assert r.status_code == 200
+
+    def test_sync_tiene_limite_global(self, abierto, monkeypatch):
+        from merchbot.data import refresh
+
+        resultado = MagicMock(ok=True, stock_total=1, pedidos_total=1, error=None)
+        monkeypatch.setattr(refresh, "actualizar_datos", lambda: resultado)
+        limites.reiniciar()
+        codigos = [abierto.post("/api/sync").status_code for _ in range(3)]
+        assert codigos == [200, 200, 429]
+
+    def test_no_se_ven_reclamos_ajenos(self, monkeypatch):
+        servicio = _servicio()
+        app = create_app(service_factory=lambda: servicio)
+        with TestClient(app) as a, TestClient(app) as b:
+            r = a.post("/api/reclamos", json={"descripcion": "Llegaron gorras rotas", "tipo": "producto_fallado"})
+            numero = r.json()["numero"]
+            assert a.get(f"/api/reclamos/{numero}").status_code == 200
+            ajeno = b.get(f"/api/reclamos/{numero}")
+            assert ajeno.status_code == 404 and "gorras" not in ajeno.text

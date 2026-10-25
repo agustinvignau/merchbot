@@ -43,7 +43,7 @@ Los datos de ejemplo son ficticios (`data/Stock_Merchandising_Demo.xlsx`).
 | ✅ | Sentimiento y prioridad explicable de reclamos, con evaluación (Fase 6) | Hecho |
 | ✅ | Login del chat, límites de uso, cabeceras de seguridad y set de evaluación del asistente (Fase 7) | Hecho |
 | ✅ | Modelos de respaldo si Gemini se queda sin cuota | Hecho |
-| ✅ | 447 tests automatizados (Gemini mockeado) | Hecho |
+| ✅ | 454 tests automatizados (Gemini mockeado) | Hecho |
 | ✅ | Reflexión final del TP (Fase 8) | Hecho |
 | ⏭️ | Deploy 24/7 en VPS | Trabajo futuro |
 
@@ -265,7 +265,7 @@ Comandos: `/start`, `/help`, `/whoami`, `/sync`, `/comprar`, `/resumen`, `/clear
 pytest
 ```
 
-447 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
+454 tests. Usan SQLite en memoria y mockean Gemini, así que no consumen cuota ni requieren claves.
 
 ## Estructura
 
@@ -313,8 +313,8 @@ merchbot/
 │   ├── SENTIMIENTO.md           # sentimiento y prioridad de reclamos
 │   ├── SEGURIDAD.md             # acceso, límites, cabeceras, inyección y evaluación
 │   ├── EVALUACION_SENTIMIENTO.md  # resultados de scripts/evaluar_sentimiento.py
-│   ├── img/                     # capturas
-│   └── Propuesta_MerchBot.pdf
+│   ├── REFLEXION.md             # reflexión final del TP
+│   └── img/                     # capturas
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pyproject.toml

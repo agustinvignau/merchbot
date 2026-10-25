@@ -199,8 +199,10 @@ class ChatService:
                        "Lo revisa una persona del equipo.", hora=hora)
 
     @staticmethod
-    def consultar_reclamo(numero: int) -> dict:
-        return tools.consultar_estado_reclamo(numero)
+    def consultar_reclamo(numero: int, user_id: Optional[UserId] = None) -> dict:
+        """Estado de un reclamo. Con `user_id`, solo si lo registró ese usuario."""
+        contexto = None if user_id is None else {"user_id": str(user_id)}
+        return tools.consultar_estado_reclamo(numero, _contexto=contexto)
 
 
 def _ms_desde(inicio: float) -> int:

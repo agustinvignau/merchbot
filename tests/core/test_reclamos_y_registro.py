@@ -69,3 +69,19 @@ def test_registrar_y_listar_interacciones():
     assert [i["consulta"] for i in todas] == ["qt", "q2", "q1", "q0"]
     assert len(listar_interacciones(canal="web")) == 3
     assert listar_interacciones(limite=1)[0]["tipo"] == "conversacion"
+
+
+def test_desde_el_chat_solo_se_consultan_reclamos_propios():
+    r = registrar_reclamo("Llegaron gorras rotas", "producto_fallado",
+                          _contexto={"canal": "web", "user_id": "web:ana", "hora": "10:00"})
+    numero = r["numero"]
+    propio = ejecutar_tool("consultar_estado_reclamo", {"numero": numero}, {"user_id": "web:ana"})
+    ajeno = ejecutar_tool("consultar_estado_reclamo", {"numero": numero}, {"user_id": "web:beto"})
+    sin_usuario = ejecutar_tool("consultar_estado_reclamo", {"numero": numero}, {})
+    assert propio["encontrado"] is True
+    assert ajeno == {"encontrado": False, "numero": numero}
+    assert sin_usuario["encontrado"] is False
+    # el modelo no puede hacerse pasar por otro usuario mandando _contexto
+    trampa = ejecutar_tool("consultar_estado_reclamo",
+                           {"numero": numero, "_contexto": {"user_id": "web:ana"}}, {"user_id": "web:beto"})
+    assert trampa["encontrado"] is False

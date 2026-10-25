@@ -360,17 +360,29 @@ def _analizar_reclamo(reclamo: Reclamo) -> None:
     reclamo.analisis_motor = sentimiento.motor
 
 
-def consultar_estado_reclamo(numero: int) -> dict:
-    """Devuelve el estado de un reclamo por su número."""
+def consultar_estado_reclamo(numero: int, _contexto: Optional[dict] = None) -> dict:
+    """Devuelve el estado de un reclamo por su número.
+
+    Desde el chat (`_contexto` con el usuario) solo se ven los reclamos propios:
+    un reclamo ajeno responde igual que uno inexistente, para no revelar nada.
+    Sin `_contexto` (uso interno: panel, tests) no se filtra.
+    """
     try:
         numero = int(numero)
     except (TypeError, ValueError):
         return {"encontrado": False, "error": "El número de reclamo tiene que ser un número entero."}
     with get_session() as session:
         reclamo = session.get(Reclamo, numero)
-        if reclamo is None:
+        if reclamo is None or not _es_del_usuario(reclamo, _contexto):
             return {"encontrado": False, "numero": numero}
         return {"encontrado": True, **reclamo.to_dict()}
+
+
+def _es_del_usuario(reclamo: Reclamo, contexto: Optional[dict]) -> bool:
+    if contexto is None:
+        return True
+    usuario = contexto.get("user_id")
+    return usuario is not None and str(usuario) == reclamo.user_id
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +423,7 @@ TOOLS_MAP = {
 }
 
 # Funciones que reciben el contexto de la conversación (canal, usuario, hora).
-TOOLS_CON_CONTEXTO = {"registrar_reclamo"}
+TOOLS_CON_CONTEXTO = {"registrar_reclamo", "consultar_estado_reclamo"}
 
 # Tipo de consulta según la función usada (para el registro de interacciones).
 TIPO_POR_TOOL = {

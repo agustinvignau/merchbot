@@ -38,7 +38,10 @@ def test_corre_y_registra_cada_mensaje():
     assert {i["hora_simulada"] for i in interacciones} == {e.hora for e in demo.GUION}
 
 
-def test_genera_markdown():
+def test_genera_markdown(monkeypatch):
+    # Todos los días hábiles: si no, un sábado o domingo todo cae fuera de horario.
+    from merchbot.config import settings
+    monkeypatch.setattr(settings, "atencion_dias", "0,1,2,3,4,5,6")
     md = demo.a_markdown(demo.correr_guion(_servicio()), "gemini-test")
     assert md.startswith("# Diálogos de demostración")
     for esc in demo.GUION:

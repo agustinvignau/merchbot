@@ -19,9 +19,16 @@ Qué protege a MerchBot antes de exponerlo fuera de tu máquina, y cómo se mide
 | Límite | Por defecto | Para qué |
 |---|---|---|
 | Consultas al chat y reclamos | 20 por minuto por sesión | Cuidar la cuota de Gemini y frenar abusos |
-| Intentos de ingreso (chat y panel) | 5 cada 5 minutos por IP | Que no se pueda probar claves a lo bruto |
+| Consultas al chat y reclamos por IP | El triple (60 por minuto) | Que borrar la cookie para pedir sesiones nuevas no saltee el límite anterior |
+| Intentos de ingreso (chat, panel y header `X-Admin-Key`) | 5 cada 5 minutos por IP | Que no se pueda probar claves a lo bruto, tampoco por la API |
+| Actualizar datos (`/api/sync`) | 2 por minuto en total | Cada sincronización descarga la planilla completa |
 
-Al pasarse, la API responde 429 con un mensaje claro. Detrás de un proxy con HTTPS, la IP real se toma de `X-Forwarded-For` solo si viene de un proxy listado en `PROXIES_CONFIABLES`. Los contadores viven en memoria: con varias réplicas del servidor habría que pasarlos a Redis.
+Al pasarse, la API responde 429 con un mensaje claro. Detrás de un proxy con HTTPS, la IP real se toma de `X-Forwarded-For` solo si viene de un proxy listado en `PROXIES_CONFIABLES`. En Docker, `docker-compose.yml` ya confía en la red interna (`172.16.0.0/12`); sin eso, todas las visitas llegarían con la misma IP y 5 claves mal puestas bloquearían el ingreso de todos. Los contadores viven en memoria: con varias réplicas del servidor habría que pasarlos a Redis.
+
+## Datos de cada usuario
+
+- **Reclamos:** cada usuario solo ve los suyos, tanto desde el chat ("¿cómo va el reclamo 3?") como desde la API. Un reclamo ajeno responde igual que uno inexistente, para no revelar que existe. El panel admin ve todos.
+- **Telegram:** con `APP_ENV=production` el bot no arranca si la lista de usuarios autorizados está vacía.
 
 ## Cabeceras del navegador
 
@@ -62,3 +69,16 @@ La tercera capa no es infalible: por eso la evaluación tiene una categoría sol
 | Inyección | 4 | Revelar el prompt, rol "sin restricciones", forzar campos del reclamo, listar funciones |
 
 Si cambia la planilla de demo, los tests (`tests/test_evaluar_bot.py`) avisan que hay que actualizar los datos esperados.
+
+## Pendientes conocidos
+
+Lo que falta antes de usarlo con datos reales o embebido en otro sistema:
+
+| Tema | Hoy | Qué haría falta |
+|---|---|---|
+| Cerrar sesión | El token sigue valiendo hasta vencer (12 h); el del panel no vence mientras no cambie `ADMIN_KEY` | Una versión de sesión que se invalide al salir y vencimiento para el panel |
+| Retención | Las conversaciones se guardan sin fecha de borrado | Borrar automáticamente lo más viejo (por ejemplo, 90 días) |
+| Planilla de Google | El modo Sheets lee una hoja compartida "con el enlace" | Cuenta de servicio de Google, o leer directo de la base del sistema de la empresa |
+| Embebido en un ERP | Las cabeceras prohíben el iframe y el login es propio | Permitir solo el dominio del ERP (`frame-ancestors`), identidad delegada con un token firmado por el ERP en lugar de cookies, y permisos por rol en las funciones (un vendedor ve solo sus clientes) |
+| Varias empresas | Una base y una configuración | Separar datos y configuración por empresa |
+| Integraciones | La única credencial para la API es `ADMIN_KEY`, con acceso total | API versionada y claves por integración con permisos acotados |
